@@ -6,8 +6,7 @@ class VolumeViewModel: ObservableObject,
 {
     @Published var volume: Volume
     @Published var lastSize: SizeInfo?
-    @Published var counter = 0
-    @Published public var isSelected = false
+    @Published public var isSelected = true
     @Published var sizes: [SizeInfo] = []
     
     var id = UUID()
@@ -23,6 +22,34 @@ class VolumeViewModel: ObservableObject,
     public init(volume: Volume) {
         self.volume = volume
     }
+
+    public var maxUsedGigs: UInt {
+        var ret: UInt = 0
+        for size in sizes { if size.gigsUsed > ret { ret = size.gigsUsed } }
+        return ret
+    }
+
+    public var maxFreeGigs: UInt {
+        var ret: UInt = 0
+        for size in sizes { if size.gigsFree > ret { ret = size.gigsFree } }
+        return ret
+    }
+
+    public func maxGigs(showFree: Bool, showUsed: Bool) -> UInt {
+        if showFree {
+            if showUsed {
+                return max(maxFreeGigs, maxUsedGigs)
+            } else {
+                return maxFreeGigs
+            }
+        } else {
+            if showUsed {
+                return maxUsedGigs
+            } else {
+                return 0
+            }
+        }
+    }
 }
 
 class VolumeListViewModel: ObservableObject {
@@ -32,11 +59,13 @@ class VolumeListViewModel: ObservableObject {
 @MainActor
 public final class ViewModel: ObservableObject {
     @Published var volumes = VolumeListViewModel()
-    @Published var counter = 0
+    @Published var showUsedSpace = false
+    @Published var showFreeSpace = true
+    @Published var showMultipleCharts = false
 
     let manager = Manager()
 
-    let seconds = 12            // XXX make this a published variable
+    let seconds = 8            // XXX make this a published variable
 
     var newVolumeSizes: [String:[SizeInfo]] = [:]
     
@@ -44,12 +73,9 @@ public final class ViewModel: ObservableObject {
         Task {
             do {
                 let volumes = try await manager.listVolumes()
-                print("volumes.count \(volumes.count)")
-
                 await MainActor.run {
                     self.volumes.list = volumes.map { VolumeViewModel(volume: $0) }
-                    self.counter += 1
-//                    self.volumes.objectWillChange.send()
+                    self.objectWillChange.send()
                 }
                 self.startTaskWithInterval(of: seconds)
             } catch {
@@ -62,13 +88,26 @@ public final class ViewModel: ObservableObject {
 
     var volumesSortedEmptyFirst: [VolumeViewModel] {
         var list = self.volumes.list
-        _ = list.sort { $0.lastSize?.freeSize_k ?? 0 > $1.lastSize?.freeSize_k ?? 0 }
+        list.sort { $0.lastSize?.freeSize_k ?? 0 > $1.lastSize?.freeSize_k ?? 0 }
         return list
+    }
+
+    func clearAll() {
+        for volumeViewModel in volumes.list {
+            volumeViewModel.isSelected = false
+        }
+    }
+    
+    func selectAll() {
+        for volumeViewModel in volumes.list {
+            volumeViewModel.isSelected = true
+        }
     }
     
     private func startTaskWithInterval(of seconds: Int) {
         self.task = Task {
             do {
+                var isFirst = true
                 while(true) {
                     let newVolumeSizes: [String:[SizeInfo]] = try await manager.recordVolumeSizes()
 
@@ -79,18 +118,21 @@ public final class ViewModel: ObservableObject {
                             if let newSizes = newVolumeSizes[volume.volume.name] {
                                 volume.lastSize = newSizes.last
                                 volume.sizes = newSizes
-                                volume.counter += 1
-                                print("updating volume \(volume.volume.name) size to \(newSizes.count) counter \(volume.counter)")
+                                print("updating volume \(volume.volume.name) size to \(newSizes.count)")
                             }
                          }
                         self.volumes.list.sort {
                             $0.lastSize?.totalSize_k ?? 0 > $1.lastSize?.totalSize_k ?? 0
                         }
-                        self.counter += 1
+                        self.objectWillChange.send()
                      }
                     try Task.checkCancellation()
-                    try await Task.sleep(nanoseconds: UInt64(seconds*1_000_000_000))
+                    if !isFirst {
+                        // don't sleep the first time so the graph updates quicker
+                        try await Task.sleep(nanoseconds: UInt64(seconds*1_000_000_000))
+                    }
                     try Task.checkCancellation()
+                    isFirst = false 
                 }
             } catch {
                 print("ERROR: \(error)")
