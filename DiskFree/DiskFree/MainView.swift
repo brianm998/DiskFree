@@ -21,21 +21,27 @@ struct VolumeActivityView: View {
     @EnvironmentObject var viewModel: ViewModel
     
     var body: some View {
-        List(viewModel.volumes.list) { volumeView in
+        List(viewModel.volumesSortedEmptyFirst) { volumeView in
             //ForEach(viewModel.volumes.list) { volumeView in
             if volumeView.isSelected {
                 HStack {
                     Chart(volumeView.sizes) {
                         LineMark(
                           x: .value("time", Date(timeIntervalSince1970: $0.timestamp)),
-			  y: .value("used", $0.gigsUsed)
+			  y: .value("used", $0.gigsUsed),
+                          series: .value("f", "a")
 			)
-
-			.lineStyle(StrokeStyle(lineWidth: 2))
-			.foregroundStyle(.blue)
-			.interpolationMethod(.cardinal)
-//			.symbol(Circle().strokeBorder(lineWidth: 4))
-			.symbolSize(60)
+			  .lineStyle(StrokeStyle(lineWidth: 2))
+			  .foregroundStyle(.blue)
+			  .interpolationMethod(.cardinal)
+                        LineMark(
+                          x: .value("time", Date(timeIntervalSince1970: $0.timestamp)),
+			  y: .value("free", $0.gigsFree),
+                          series: .value("f", "b")
+			)
+			  .lineStyle(StrokeStyle(lineWidth: 2))
+			  .foregroundStyle(.green)
+			  .interpolationMethod(.cardinal)
                     }
                     VStack(alignment: .leading) {
                         Text(volumeView.volume.name)
@@ -79,12 +85,12 @@ struct VolumeChoiceItemView: View {
                 
             }
               .toggleStyle(.checkbox)
-              .onChange(of: volumeViewModel.isSelected) {                   viewModel.objectWillChange.send()
+              .onChange(of: volumeViewModel.isSelected) {
+                  viewModel.objectWillChange.send()
               }
                
             if let lastSize = volumeViewModel.lastSize {
-                
-                Text("\(volumeViewModel.volume.name) \(lastSize.totalSize) \(volumeViewModel.sizes.count) sizes \(volumeViewModel.counter) counter")
+                Text("\(lastSize.totalSize) \(volumeViewModel.volume.name)")
             } else {
                 Text("\(volumeViewModel.volume.name)")
             }

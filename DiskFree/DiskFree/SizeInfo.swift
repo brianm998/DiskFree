@@ -46,6 +46,8 @@ Filesystem    1024-blocks       Used Available Capacity iused      ifree %iused 
     }
 
     var gigsUsed: Int { Int(Double(usedSize_k)/Double(oneGiga)) }
+    var gigsFree: Int { Int(Double(freeSize_k)/Double(oneGiga)) }
+    var gigsTotal: Int { Int(Double(totalSize_k)/Double(oneGiga)) }
     
     // user readable versions
     var totalSize: String { userReadable(totalSize_k) }

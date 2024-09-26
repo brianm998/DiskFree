@@ -59,6 +59,12 @@ public final class ViewModel: ObservableObject {
     }
 
     private var task: Task<Void,Never>?
+
+    var volumesSortedEmptyFirst: [VolumeViewModel] {
+        var list = self.volumes.list
+        _ = list.sort { $0.lastSize?.freeSize_k ?? 0 > $1.lastSize?.freeSize_k ?? 0 }
+        return list
+    }
     
     private func startTaskWithInterval(of seconds: Int) {
         self.task = Task {
