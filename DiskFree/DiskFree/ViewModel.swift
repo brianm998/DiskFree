@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 typealias VolumeRecords = [String:[SizeInfo]]
 
@@ -62,6 +63,40 @@ class VolumeViewModel: ObservableObject,
     }
 }
 
+class PreferencesViewModel: ObservableObject {
+    // this is tracked with published variables in the volume view models
+    // used here for initial values, and also shadowing the view model observables
+    var volumesToShow: Set<String>
+    @Published var chooseDisksToMonitor: Bool
+    @Published var showMultipleCharts: Bool
+    @Published var showFreeSpace: Bool
+    @Published var showUsedSpace: Bool
+
+    init() {
+        self.volumesToShow = []
+        self.chooseDisksToMonitor = true
+        self.showMultipleCharts = false
+        self.showFreeSpace = true
+        self.showUsedSpace = false
+    }
+
+    init(preferences: Preferences) {
+        self.volumesToShow = Set(preferences.volumesToShow)
+        self.chooseDisksToMonitor = preferences.chooseDisksToMonitor
+        self.showMultipleCharts = preferences.showMultipleCharts
+        self.showFreeSpace = preferences.showFreeSpace
+        self.showUsedSpace = preferences.showUsedSpace
+    }
+
+    var preferencesToSave: Preferences {
+        Preferences(volumesToShow: Array(volumesToShow),
+                    chooseDisksToMonitor: self.chooseDisksToMonitor,
+                    showMultipleCharts: self.showMultipleCharts,
+                    showFreeSpace: self.showFreeSpace,
+                    showUsedSpace: self.showUsedSpace)
+    }
+}
+
 class VolumeListViewModel: ObservableObject {
     @Published var list: [VolumeViewModel] = []
 }
@@ -69,13 +104,43 @@ class VolumeListViewModel: ObservableObject {
 @MainActor
 public final class ViewModel: ObservableObject {
     @Published var volumes = VolumeListViewModel()
-    @Published var showUsedSpace = false
-    @Published var showFreeSpace = true
-    @Published var showMultipleCharts = false
-    @Published var showSideBar = true
+    @Published var preferences = PreferencesViewModel()
 
+    private var cancellables: Set<AnyCancellable> = []
+    
+    init() {
+        Task {
+            // try to load load preferences from file
+            try? await preferenceManager?.loadPreferences()
+            if let preferenceManager,
+               let preferences = await preferenceManager.getPreferences()
+            {
+                await MainActor.run {
+                  self.preferences = PreferencesViewModel(preferences: preferences)
+                }
+            }
+        }
+        
+        Publishers.CombineLatest4(preferences.$chooseDisksToMonitor,
+                                  preferences.$showMultipleCharts,
+                                  preferences.$showFreeSpace,
+                                  preferences.$showUsedSpace)
+          .sink { _ in
+              print("WOOT")     // XXX save preferences here
+          }
+          .store(in: &self.cancellables)
+
+        /*
+        preferences.$volumesToShow        
+          .sink { _ in
+              print("WOOT")     // XXX save preferences here
+          }
+          .store(in: &self.cancellables)*/
+    }
+    
     let manager = Manager()
     let recordKeeper = VolumeRecordKeeper()
+    let preferenceManager = PreferenceManager()
     
     let seconds = 8            // XXX make this a published variable
 
@@ -87,7 +152,16 @@ public final class ViewModel: ObservableObject {
                 await self.loadStoredRecords()
                 let volumes = try await manager.listVolumes()
                 await MainActor.run {
-                    self.volumes.list = volumes.map { VolumeViewModel(volume: $0) }
+                    self.volumes.list = volumes.map {
+                        let ret = VolumeViewModel(volume: $0)
+
+                        if preferences.volumesToShow.contains($0.name) {
+                            ret.isSelected = true
+                        } else {
+                            ret.isSelected = false
+                        }
+                        return ret
+                    }
                     self.objectWillChange.send()
                 }
                 self.startTaskWithInterval(of: seconds)
@@ -222,6 +296,27 @@ public final class ViewModel: ObservableObject {
                 } catch {
                     print("ERROR: \(error)")
                 }
+            }
+        }
+    }
+
+    // XXX call this for top bar toggles too (not just volume selection toggles)
+    func update(for volumeViewModel: VolumeViewModel? = nil) { 
+        if let volumeViewModel {
+            if volumeViewModel.isSelected {
+                self.preferences.volumesToShow.insert(volumeViewModel.volume.name)
+            } else {
+                self.preferences.volumesToShow.remove(volumeViewModel.volume.name)
+            }
+        }
+
+        let prefsToSave = self.preferences.preferencesToSave
+        Task {
+            do {
+              await self.preferenceManager?.set(preferences: prefsToSave)
+                try await self.preferenceManager?.writePreferences()
+            } catch {
+                print("error saving preferences: \(error)")
             }
         }
     }

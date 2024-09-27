@@ -10,7 +10,6 @@ public actor VolumeRecordKeeper {
     let recordFilename: String
     
     init?() {
-
         if let documentsDirectory = FileManager.default.urls(for: .documentDirectory,
                                                              in: .userDomainMask).last
         {

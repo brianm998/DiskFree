@@ -9,7 +9,7 @@ struct MainView: View {
             TopView()
             HStack {
                 VolumeActivityView()
-                if viewModel.showSideBar {
+                if viewModel.preferences.chooseDisksToMonitor {
                     VolumeChoiceView()
                 }
             }
@@ -24,17 +24,32 @@ struct TopView: View {
     @EnvironmentObject var viewModel: ViewModel
     var body: some View {
         HStack {
-            Toggle(isOn: $viewModel.showUsedSpace) {
+            Toggle(isOn: $viewModel.preferences.showUsedSpace) {
                 Text("show used space")
             }
-            Toggle(isOn: $viewModel.showFreeSpace) {
+            .onChange(of: viewModel.preferences.showUsedSpace) { _, value in
+                viewModel.update()
+            }
+
+            Toggle(isOn: $viewModel.preferences.showFreeSpace) {
                 Text("show free space")
             }
-            Toggle(isOn: $viewModel.showMultipleCharts) {
+            .onChange(of: viewModel.preferences.showFreeSpace) { _, value in
+                viewModel.update()
+            }
+
+            Toggle(isOn: $viewModel.preferences.showMultipleCharts) {
                 Text("show multiple charts")
             }
-            Toggle(isOn: $viewModel.showSideBar) {
+            .onChange(of: viewModel.preferences.showMultipleCharts) { _, value in
+                viewModel.update()
+            }
+
+            Toggle(isOn: $viewModel.preferences.chooseDisksToMonitor) {
                 Text("choose disks to monitor")
+            }
+            .onChange(of: viewModel.preferences.chooseDisksToMonitor) { _, value in
+                viewModel.update()
             }
         }
     }
@@ -59,7 +74,7 @@ struct VolumeActivityView: View {
     
     
     var body: some View {
-        if viewModel.showMultipleCharts {
+      if viewModel.preferences.showMultipleCharts {
             self.multiCharts
         } else {
             self.combinedChart
@@ -92,7 +107,7 @@ struct VolumeActivityView: View {
         Chart {
             ForEach(viewModel.volumesSortedEmptyFirst) { volumeView in
                 if volumeView.isSelected {
-                    if viewModel.showFreeSpace {
+                    if viewModel.preferences.showFreeSpace {
                         ForEach(volumeView.sizes) { sizeData in
                             LineMark(
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
@@ -118,7 +133,7 @@ struct VolumeActivityView: View {
                               } 
                         }
                     }
-                    if viewModel.showUsedSpace {
+                    if viewModel.preferences.showUsedSpace {
                         ForEach(volumeView.sizes) { sizeData in
                             LineMark(
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
@@ -144,7 +159,7 @@ struct VolumeActivityView: View {
                 if volumeView.isSelected {
                     HStack {
                         Chart(volumeView.sizes) { sizeData in
-                            if viewModel.showFreeSpace {
+                            if viewModel.preferences.showFreeSpace {
                                 AreaMark(
                                   x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
 			          y: .value("free", sizeData.gigsFree),
@@ -155,7 +170,7 @@ struct VolumeActivityView: View {
 			          .foregroundStyle(greenGradientColor)
 			          .interpolationMethod(.cardinal)
                             }
-                            if viewModel.showUsedSpace {
+                            if viewModel.preferences.showUsedSpace {
                                 AreaMark(
                                   x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
 			          y: .value("used", sizeData.gigsUsed),
@@ -167,8 +182,8 @@ struct VolumeActivityView: View {
 			          .interpolationMethod(.cardinal)
                             }
                         }
-                          .chartYScale(domain:0...volumeView.maxGigs(showFree: viewModel.showFreeSpace,
-                                                                     showUsed: viewModel.showUsedSpace))
+                          .chartYScale(domain:0...volumeView.maxGigs(showFree: viewModel.preferences.showFreeSpace,
+                                                                     showUsed: viewModel.preferences.showUsedSpace))
                         VStack(alignment: .leading) {
                             Text(volumeView.volume.name)
                             if let volumeSize = volumeView.lastSize {
@@ -224,7 +239,8 @@ struct VolumeChoiceItemView: View {
                 }
             }
               .toggleStyle(.checkbox)
-              .onChange(of: volumeViewModel.isSelected) {
+              .onChange(of: volumeViewModel.isSelected) { _, value in
+                  viewModel.update(for: volumeViewModel)
                   viewModel.objectWillChange.send()
               }
             
