@@ -4,7 +4,11 @@ let oneMega:UInt = 1024         // 1 mega is 1024 1024k blocks
 let oneGiga:UInt = oneMega*1024 // 1 giga is 1024 megs
 let oneTera:UInt = oneGiga*1024 // 1 tera is 1024 gigs
 
-public struct SizeInfo: Sendable, Identifiable, Equatable {
+public struct SizeInfo: Sendable,
+                        Identifiable,
+                        Equatable,
+                        Codable
+{
     let totalSize_k: UInt
     let usedSize_k: UInt
     let freeSize_k: UInt

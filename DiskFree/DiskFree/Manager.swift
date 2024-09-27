@@ -29,7 +29,7 @@ public actor Manager: Sendable {
     private var volumes: [Volume] = []
     private var dfActors: [Volume:ShellActor] = [:]
 
-    private var volumeSizes: [String:[SizeInfo]] = [:]
+    private var volumeSizes: [String:[SizeInfo]] = [:] // keyed by volume.name
     
     // keep track of volume sizes
 
@@ -37,7 +37,7 @@ public actor Manager: Sendable {
 
     func listVolumes() async throws -> [Volume] {
         let output = try await diskUtilActor.execute()
-        print(output)
+//        print(output)  // printing out the full diskutil output is EXTREMELY verbose
         let outputLines = output.components(separatedBy: "\n")
 
         var ret: [Volume]  = []
