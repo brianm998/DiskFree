@@ -8,7 +8,7 @@ class VolumeViewModel: ObservableObject,
     @Published var lastSize: SizeInfo?
     @Published public var isSelected = true
     @Published var sizes: [SizeInfo] = []
-    
+
     var id = UUID()
 
     func hash(into hasher: inout Hasher) {
@@ -35,6 +35,14 @@ class VolumeViewModel: ObservableObject,
         return ret
     }
 
+    var chartLineText: String {
+        if let lastSize = self.lastSize {
+            return "\(self.volume.name) - \(lastSize.freeSizeInt) free"
+        } else {
+            return self.volume.name
+        }
+    }
+    
     public func maxGigs(showFree: Bool, showUsed: Bool) -> UInt {
         if showFree {
             if showUsed {
@@ -62,6 +70,7 @@ public final class ViewModel: ObservableObject {
     @Published var showUsedSpace = false
     @Published var showFreeSpace = true
     @Published var showMultipleCharts = false
+    @Published var showSideBar = true
 
     let manager = Manager()
 
@@ -103,7 +112,7 @@ public final class ViewModel: ObservableObject {
             volumeViewModel.isSelected = true
         }
     }
-    
+
     private func startTaskWithInterval(of seconds: Int) {
         self.task = Task {
             do {

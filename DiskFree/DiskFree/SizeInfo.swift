@@ -1,8 +1,8 @@
 import Foundation
 
-let oneMega = 1024         // 1 mega is 1024 1024k blocks
-let oneGiga = oneMega*1024 // 1 giga is 1024 megs
-let oneTera = oneGiga*1024 // 1 tera is 1024 gigs
+let oneMega:UInt = 1024         // 1 mega is 1024 1024k blocks
+let oneGiga:UInt = oneMega*1024 // 1 giga is 1024 megs
+let oneTera:UInt = oneGiga*1024 // 1 tera is 1024 gigs
 
 public struct SizeInfo: Sendable, Identifiable, Equatable {
     let totalSize_k: UInt
@@ -12,7 +12,7 @@ public struct SizeInfo: Sendable, Identifiable, Equatable {
 
     public var id: String { "\(timestamp)" }
     
-    init?(dfOutput: String) {
+    init?(dfOutput: String, timestamp: TimeInterval) {
         /*
          expects this kind of string:
            
@@ -22,6 +22,7 @@ Filesystem    1024-blocks       Used Available Capacity iused      ifree %iused 
 
         // should match the beginning of the second line
         let regex = /^\/\w+\/\w+\s+(\d+)\s+(\d+)\s+(\d+)/
+
         let lines = dfOutput.components(separatedBy: "\n")
         if lines.count > 1,
            let match = lines[1].firstMatch(of: regex),
@@ -32,7 +33,7 @@ Filesystem    1024-blocks       Used Available Capacity iused      ifree %iused 
             self.totalSize_k = match1
             self.usedSize_k = match2
             self.freeSize_k = match3
-            self.timestamp = Date().timeIntervalSince1970
+            self.timestamp = timestamp
         } else {
             return nil
         }
@@ -54,6 +55,10 @@ Filesystem    1024-blocks       Used Available Capacity iused      ifree %iused 
     var usedSize: String  { userReadable(usedSize_k) }
     var freeSize: String  { userReadable(freeSize_k) }
 
+    var totalSizeInt: String { userReadableInts(totalSize_k) }
+    var usedSizeInt: String  { userReadableInts(usedSize_k) }
+    var freeSizeInt: String  { userReadableInts(freeSize_k) }
+
     private func userReadable(_ sizeInKilobytes: UInt) -> String {
         if sizeInKilobytes < oneMega {
             return String(format: "%.2fK", Double(sizeInKilobytes))
@@ -63,6 +68,18 @@ Filesystem    1024-blocks       Used Available Capacity iused      ifree %iused 
             return String(format: "%.2fG", Double(sizeInKilobytes)/Double(oneGiga))
         } else {
             return String(format: "%.2fT", Double(sizeInKilobytes)/Double(oneTera))
+        }
+    }
+
+    private func userReadableInts(_ sizeInKilobytes: UInt) -> String {
+        if sizeInKilobytes < oneMega {
+            return String(format: "%dK", sizeInKilobytes)
+        } else if sizeInKilobytes < oneGiga {
+            return String(format: "%dM", sizeInKilobytes/oneMega)
+        } else if sizeInKilobytes < oneTera {
+            return String(format: "%dG", sizeInKilobytes/oneGiga)
+        } else {
+            return String(format: "%dT", sizeInKilobytes/oneTera)
         }
     }
 }

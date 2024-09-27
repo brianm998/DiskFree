@@ -8,9 +8,10 @@ struct MainView: View {
         VStack {
             TopView()
             HStack {
-                // XXX add more shit here
                 VolumeActivityView()
-                VolumeChoiceView()
+                if viewModel.showSideBar {
+                    VolumeChoiceView()
+                }
             }
         }
           .onAppear {
@@ -31,6 +32,9 @@ struct TopView: View {
             }
             Toggle(isOn: $viewModel.showMultipleCharts) {
                 Text("show multiple charts")
+            }
+            Toggle(isOn: $viewModel.showSideBar) {
+                Text("choose disks to monitor")
             }
         }
     }
@@ -77,6 +81,7 @@ struct VolumeActivityView: View {
        .white,
        .yellow]
 
+
     var combinedChart: some View {
         /*
 
@@ -84,7 +89,7 @@ struct VolumeActivityView: View {
          
          */
 
-        return Chart {
+        Chart {
             ForEach(viewModel.volumesSortedEmptyFirst) { volumeView in
                 if volumeView.isSelected {
                     if viewModel.showFreeSpace {
@@ -95,10 +100,22 @@ struct VolumeActivityView: View {
                               series: .value(volumeView.volume.name,
                                              "\(volumeView.volume.name)1")
                             )
-			      .foregroundStyle(.green)
-                              .annotation(position: .overlay, alignment: .bottom) {
-                                  Text(volumeView.volume.name)
-                              }
+                              .interpolationMethod(.catmullRom)
+                              .foregroundStyle(.green)
+                              .lineStyle(StrokeStyle(lineWidth: 1, dash: [2]))
+                        }
+                        if let sizeData = volumeView.lastSize {
+                            PointMark(
+                              x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
+		              y: .value("free", sizeData.gigsFree)
+                            )
+                              .symbolSize(2)
+			      .foregroundStyle(.mint)
+                              .annotation(position: .topLeading, alignment: .bottomLeading) {
+                                  //Toggle(isOn: volumeView.isSelected) {
+                                  Text(volumeView.chartLineText)
+                                  //}
+                              } 
                         }
                     }
                     if viewModel.showUsedSpace {
@@ -109,11 +126,12 @@ struct VolumeActivityView: View {
                               series: .value(volumeView.volume.name,
                                              "\(volumeView.volume.name)2")
                             )
+                              .interpolationMethod(.catmullRom)
 			      .foregroundStyle(.red)
-                              .annotation(position: .overlay, alignment: .bottom) {
+                              .annotation(position: .overlay, alignment: .topTrailing) {
                                   Text(volumeView.volume.name)
                               }
-                        }
+                            }
                     }
                 }
             }
