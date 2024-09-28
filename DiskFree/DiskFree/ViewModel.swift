@@ -156,6 +156,7 @@ public final class ViewModel: ObservableObject {
     }
     
     let manager = Manager()
+
     let recordKeeper = VolumeRecordKeeper()
     let preferenceManager = PreferenceManager()
     
@@ -288,6 +289,31 @@ public final class ViewModel: ObservableObject {
         }
     }
     
+    private let lineColors: [Color] =
+      [
+        .green,
+        .blue,
+        .cyan,
+        .yellow,
+        .orange,
+        .red,
+      ]
+    /*
+     [.mint,
+     .green,
+     .blue,
+     .brown,
+     .indigo,
+     .orange,
+     .pink,
+     .purple,
+     .red,
+     .teal,
+     .yellow]
+     */
+    
+
+
     private func viewUpdate(records: VolumeRecords, shouldSave: Bool = true) async {
         await MainActor.run {
             // merge them in and apply a time threshold
@@ -322,6 +348,21 @@ public final class ViewModel: ObservableObject {
             }
             self.volumes.list.sort {
                 $0.lastSize?.totalSize_k ?? 0 > $1.lastSize?.totalSize_k ?? 0
+            }
+
+            // apply colors here
+
+            let volumesEmptyFirst = self.volumes.list.sorted {
+                $0.lastFreeSize() > $1.lastFreeSize()
+            }
+            
+            var colorIndex = 0
+            for var volumeViewModel in volumesEmptyFirst {
+                if volumeViewModel.isSelected {
+                    volumeViewModel.lineColor = lineColors[colorIndex]
+                    colorIndex += 1
+                    if colorIndex >= lineColors.count { colorIndex = 0 }
+                }
             }
 
             self.objectWillChange.send()
