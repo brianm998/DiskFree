@@ -111,7 +111,7 @@ struct VolumeActivityView: View {
                   .padding(4)
                       .border(.black, width: 1)
                       .background(.white)
-                      .opacity(0.8)
+                      .opacity(0.95)
             }
         }
     }
@@ -143,7 +143,7 @@ struct VolumeActivityView: View {
                                                      dash: [12],
                                                      dashPhase: 0))
 
-                            if volumeView.isMostEmpty {
+                            if volumeView.isMostFull {
                                 AreaMark(
                                   x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
 			          y: .value("free", sizeData.gigsFree),
@@ -340,6 +340,9 @@ struct SettingsView: View {
                              voice: $viewModel.preferences.errorVoice)
               .frame(maxWidth: 180)
               .disabled(!viewModel.preferences.soundVoiceOnErrors)
+              .onChange(of: viewModel.preferences.errorVoice) { _, value in
+                  viewModel.update()
+              }
             
             Spacer()
               .frame(maxHeight: 20)

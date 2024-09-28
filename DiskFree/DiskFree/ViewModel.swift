@@ -15,6 +15,7 @@ class VolumeViewModel: ObservableObject,
     @Published var lineColor: Color
     @Published var chartFreeLineText: String = ""
     @Published var isMostEmpty = false
+    @Published var isMostFull = false
     
     var id = UUID()
 
@@ -345,25 +346,24 @@ public final class ViewModel: ObservableObject {
     
     private let lineColors: [Color] =
       [
-        .green,
         .blue,
         .cyan,
+        .indigo,
+        .brown,
         .yellow,
+        .pink,
         .orange,
-        .red,
+        .purple,
       ]
     /*
      [.mint,
      .green,
      .blue,
-     .brown,
-     .indigo,
+     
      .orange,
-     .pink,
-     .purple,
-     .red,
+
      .teal,
-     .yellow]
+
      */
     
 
@@ -412,22 +412,33 @@ public final class ViewModel: ObservableObject {
             
             var colorIndex = 0
             var lastSelectedViewModel: VolumeViewModel? = nil
+            var firstSelectedViewModel: VolumeViewModel? = nil
             for var volumeViewModel in volumesEmptyFirst {
+                volumeViewModel.isMostFull = false
                 volumeViewModel.isMostEmpty = false
                 if volumeViewModel.isSelected {
-                    volumeViewModel.lineColor = lineColors[colorIndex]
-                    colorIndex += 1
-                    if colorIndex >= lineColors.count { colorIndex = 0 }
+                    if firstSelectedViewModel == nil {
+                        firstSelectedViewModel = volumeViewModel
+                        volumeViewModel.lineColor = .green
+                    } else {
+                        volumeViewModel.lineColor = lineColors[colorIndex]
+                        colorIndex += 1
+                        if colorIndex >= lineColors.count { colorIndex = 0 }
+                    }
                     lastSelectedViewModel = volumeViewModel
                 } else {
-                    volumeViewModel.isMostEmpty = false
+                    volumeViewModel.isMostFull = false
                 }
             }
 
             if let lastSelectedViewModel {
-                lastSelectedViewModel.isMostEmpty = true
+                lastSelectedViewModel.isMostFull = true
+                lastSelectedViewModel.lineColor = .red
             }
 
+            if let firstSelectedViewModel {
+                firstSelectedViewModel.isMostEmpty = true
+            }
             self.objectWillChange.send()
         }
     }
