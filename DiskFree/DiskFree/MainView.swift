@@ -16,8 +16,11 @@ struct MainView: View {
           .toolbar {
               ToolbarItem(placement: .primaryAction) {
                   Toggle(isOn: $viewModel.preferences.showSettingsView) {
-                      Image(systemName: "gear")
-//                      Text("Settings") // XXX make an icon of some type (gear?)
+                      if viewModel.preferences.showSettingsView {
+                          Image(systemName: "chevron.right")
+                      } else {
+                          Image(systemName: "chevron.left")
+                      }
                   }
                   .onChange(of: viewModel.preferences.showSettingsView) { _, value in
                       viewModel.update()
@@ -268,12 +271,18 @@ struct SettingsView: View {
             }
             Spacer()
               .frame(maxHeight: 100)
-            Button(action: {
-                       viewModel.preferences.showSettingsView = false
-                       viewModel.update()
-                   }) {
-                Text("Hide Settings")
+
+            Toggle(isOn: $viewModel.preferences.soundVoiceOnErrors) {
+                Text("Sound Voice on Errors")
             }
+            
+            VoiceChooserView(labelText: "Error Voice:",
+                             voice: $viewModel.preferences.errorVoice)
+              .frame(maxWidth: 180)
+              .disabled(!viewModel.preferences.soundVoiceOnErrors)
+            
+            Spacer()
+              .frame(maxHeight: 20)
         }
     }
 }

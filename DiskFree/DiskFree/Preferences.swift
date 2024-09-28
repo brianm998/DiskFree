@@ -7,6 +7,8 @@ public struct Preferences: Codable, Sendable {
     let showMultipleCharts: Bool
     let showFreeSpace: Bool
     let showUsedSpace: Bool
+    let soundVoiceOnErrors: Bool
+    let errorVoice: VoiceActor.Voice
 }
 
 public actor PreferenceManager {

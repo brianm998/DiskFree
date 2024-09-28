@@ -81,6 +81,8 @@ class PreferencesViewModel: ObservableObject {
     @Published var showMultipleCharts: Bool
     @Published var showFreeSpace: Bool
     @Published var showUsedSpace: Bool
+    @Published var soundVoiceOnErrors: Bool
+    @Published var errorVoice: VoiceActor.Voice
 
     init() {
         self.volumesToShow = []
@@ -88,6 +90,8 @@ class PreferencesViewModel: ObservableObject {
         self.showMultipleCharts = false
         self.showFreeSpace = true
         self.showUsedSpace = false
+        self.soundVoiceOnErrors = true
+        self.errorVoice = .Ellen // random
     }
 
     init(preferences: Preferences) {
@@ -96,6 +100,8 @@ class PreferencesViewModel: ObservableObject {
         self.showMultipleCharts = preferences.showMultipleCharts
         self.showFreeSpace = preferences.showFreeSpace
         self.showUsedSpace = preferences.showUsedSpace
+        self.errorVoice = preferences.errorVoice
+        self.soundVoiceOnErrors = preferences.soundVoiceOnErrors
     }
 
     var preferencesToSave: Preferences {
@@ -103,7 +109,9 @@ class PreferencesViewModel: ObservableObject {
                     showSettingsView: self.showSettingsView,
                     showMultipleCharts: self.showMultipleCharts,
                     showFreeSpace: self.showFreeSpace,
-                    showUsedSpace: self.showUsedSpace)
+                    showUsedSpace: self.showUsedSpace,
+                    soundVoiceOnErrors: self.soundVoiceOnErrors,
+                    errorVoice: self.errorVoice)
     }
 }
 
@@ -165,8 +173,11 @@ public final class ViewModel: ObservableObject {
     func listVolumes() {
         Task {
             do {
+                //say("we are now loading stored records", as: .Bad)
                 await self.loadStoredRecords()
+                //say("we are now loading volumes")
                 let volumes = try await manager.listVolumes()
+                //say("we are now done loading volumes")
                 await MainActor.run {
                     var colorIndex = 0
                     self.volumes.list = volumes.map {
