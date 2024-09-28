@@ -6,54 +6,32 @@ struct MainView: View {
 
     var body: some View {
         VStack {
-            TopView()
             HStack {
                 VolumeActivityView()
-                if viewModel.preferences.chooseDisksToMonitor {
-                    VolumeChoiceView()
+                if viewModel.preferences.showSettingsView {
+                    SettingsView()
                 }
             }
         }
+          .toolbar {
+              ToolbarItem(placement: .primaryAction) {
+                  Toggle(isOn: $viewModel.preferences.showSettingsView) {
+                      Image(systemName: "gear")
+//                      Text("Settings") // XXX make an icon of some type (gear?)
+                  }
+                  .onChange(of: viewModel.preferences.showSettingsView) { _, value in
+                      viewModel.update()
+                      viewModel.objectWillChange.send()
+                  }
+              }
+          }
           .onAppear {
               viewModel.listVolumes()
           }
           .padding()
     }
 }
-struct TopView: View {
-    @EnvironmentObject var viewModel: ViewModel
-    var body: some View {
-        HStack {
-            Toggle(isOn: $viewModel.preferences.showUsedSpace) {
-                Text("show used space")
-            }
-            .onChange(of: viewModel.preferences.showUsedSpace) { _, value in
-                viewModel.update()
-            }
 
-            Toggle(isOn: $viewModel.preferences.showFreeSpace) {
-                Text("show free space")
-            }
-            .onChange(of: viewModel.preferences.showFreeSpace) { _, value in
-                viewModel.update()
-            }
-
-            Toggle(isOn: $viewModel.preferences.showMultipleCharts) {
-                Text("show multiple charts")
-            }
-            .onChange(of: viewModel.preferences.showMultipleCharts) { _, value in
-                viewModel.update()
-            }
-
-            Toggle(isOn: $viewModel.preferences.chooseDisksToMonitor) {
-                Text("choose disks to monitor")
-            }
-            .onChange(of: viewModel.preferences.chooseDisksToMonitor) { _, value in
-                viewModel.update()
-            }
-        }
-    }
-}
 struct VolumeActivityView: View {
     @EnvironmentObject var viewModel: ViewModel
 
@@ -77,26 +55,42 @@ struct VolumeActivityView: View {
       if viewModel.preferences.showMultipleCharts {
             self.multiCharts
         } else {
-            self.combinedChart
+            self.combinedChartWithLegend
         }
     }
 
-    let colors: [Color] =
-      [.mint,
-       .green,
-       .blue,
-       .brown,
-       .cyan,
-       .indigo,
-       .orange,
-       .pink,
-       .purple,
-       .red,
-       .teal,
-       .white,
-       .yellow]
+    
+    var combinedChartWithLegend: some View {
+        ZStack(alignment: .topLeading) {
+            combinedChart
+            combinedChartLegend
+        }
+    }
 
-
+    var combinedChartLegend: some View {
+        Group {
+            if viewModel.volumesSortedEmptyFirst.count > 0 {
+                VStack(alignment: .trailing) {
+                    ForEach(viewModel.volumesSortedEmptyFirst) { volumeView in
+                        if volumeView.isSelected {
+//                            HStack {
+                            Text(volumeView.chartFreeLineText)
+                              .foregroundStyle(.white)
+//                            }
+//                              .padding(2)
+//                              .frame(maxWidth: .infinity)
+                              .background(volumeView.lineColor)
+                        }
+                    }
+                }
+                //        .frame(width: 50, height: 100)
+                  .border(.black, width: 1)
+                  .background(.gray)
+                  .opacity(0.8)
+            }
+        }
+    }
+    
     var combinedChart: some View {
         /*
 
@@ -111,25 +105,44 @@ struct VolumeActivityView: View {
                         ForEach(volumeView.sizes) { sizeData in
                             LineMark(
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
-		              y: .value("free", sizeData.gigsFree),
+		              y: .value("Gigabytes Free", sizeData.gigsFree),
                               series: .value(volumeView.volume.name,
                                              "\(volumeView.volume.name)1")
                             )
                               .interpolationMethod(.catmullRom)
-                              .foregroundStyle(.green)
+                              .foregroundStyle(volumeView.lineColor)
                               .lineStyle(StrokeStyle(lineWidth: 1, dash: [2]))
+                        }
+                        if volumeView.sizes.count > 0 {
+                            let sizeData = volumeView.sizes[0]
+                            PointMark(
+                              x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
+		              y: .value("Gigabytes Free", sizeData.gigsFree)
+                            )
+                              .symbolSize(2)
+			      .foregroundStyle(.mint)
+                              .annotation(position: .topTrailing, alignment: .bottomLeading) {
+                                  Text(volumeView.volume.name)
+                                    .foregroundStyle(volumeView.lineColor)
+//                                    .padding(2)
+                                    .background(Color(red: 236/255,
+                                                      green: 235/255,
+                                                      blue: 235/255))
+                              } 
                         }
                         if let sizeData = volumeView.lastSize {
                             PointMark(
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
-		              y: .value("free", sizeData.gigsFree)
+		              y: .value("Gigabytes Free", sizeData.gigsFree)
                             )
                               .symbolSize(2)
 			      .foregroundStyle(.mint)
                               .annotation(position: .topLeading, alignment: .bottomLeading) {
-                                  //Toggle(isOn: volumeView.isSelected) {
-                                  Text(volumeView.chartLineText)
-                                  //}
+                                  Text(volumeView.volume.name)
+                                    .foregroundStyle(volumeView.lineColor)
+                                    .background(Color(red: 236/255,
+                                                      green: 235/255,
+                                                      blue: 235/255))
                               } 
                         }
                     }
@@ -137,20 +150,31 @@ struct VolumeActivityView: View {
                         ForEach(volumeView.sizes) { sizeData in
                             LineMark(
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
-		              y: .value("free", sizeData.gigsUsed),
+		              y: .value("Gigabytes Used", sizeData.gigsUsed),
                               series: .value(volumeView.volume.name,
                                              "\(volumeView.volume.name)2")
                             )
                               .interpolationMethod(.catmullRom)
 			      .foregroundStyle(.red)
-                              .annotation(position: .overlay, alignment: .topTrailing) {
-                                  Text(volumeView.volume.name)
-                              }
-                            }
+                        }/*
+                        if let sizeData = volumeView.lastSize {
+                            PointMark(
+                              x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
+		              y: .value("Gigabytes Used", sizeData.gigsUsed)
+                            )
+                              .symbolSize(2)
+			      .foregroundStyle(.mint)
+                              .annotation(position: .topLeading, alignment: .bottomLeading) {
+                                  //Toggle(isOn: volumeView.isSelected) {
+                                  Text(volumeView.chartUsedLineText)
+                                  //}
+                              } 
+                        }*/
                     }
                 }
             }
         }
+        .chartYAxisLabel("Gigabytes") 
     }
     
     var multiCharts: some View {
@@ -201,11 +225,35 @@ struct VolumeActivityView: View {
     }
 }
 
-struct VolumeChoiceView: View {
+struct SettingsView: View {
     @EnvironmentObject var viewModel: ViewModel
     
     var body: some View {
-        VStack {
+        VStack(alignment: .leading) {
+            Text("Settings")
+            Toggle(isOn: $viewModel.preferences.showUsedSpace) {
+                Text("show used space")
+            }
+            .onChange(of: viewModel.preferences.showUsedSpace) { _, value in
+                viewModel.update()
+            }
+
+            Toggle(isOn: $viewModel.preferences.showFreeSpace) {
+                Text("show free space")
+            }
+            .onChange(of: viewModel.preferences.showFreeSpace) { _, value in
+                viewModel.update()
+            }
+
+            Toggle(isOn: $viewModel.preferences.showMultipleCharts) {
+                Text("show multiple charts")
+            }
+            .onChange(of: viewModel.preferences.showMultipleCharts) { _, value in
+                viewModel.update()
+            }
+
+            Spacer()
+              .frame(maxHeight: 100)
             Text("select which disks to monitor")
             HStack {
                 Button(action: { viewModel.selectAll() }) {
@@ -215,11 +263,16 @@ struct VolumeChoiceView: View {
                     Text("Clear All")
                 }
             }
-            VStack(alignment: .leading) {
-//                List(viewModel.volumes.list) { volumeView in
-                ForEach(viewModel.volumes.list) { volumeView in
-                    VolumeChoiceItemView(volumeViewModel: volumeView)
-                }
+            ForEach(viewModel.volumes.list) { volumeView in
+                VolumeChoiceItemView(volumeViewModel: volumeView)
+            }
+            Spacer()
+              .frame(maxHeight: 100)
+            Button(action: {
+                       viewModel.preferences.showSettingsView = false
+                       viewModel.update()
+                   }) {
+                Text("Hide Settings")
             }
         }
     }

@@ -6,23 +6,22 @@ import Foundation
  todo:
 
  - limit number of size records kept
- - limit number of size records shown in gui
- - write files into app bundle
-   - a json file of volume sizes every time we check
-   - a preferences file to keep track of:
-     - what volumes to show
-     - how to show them
-     - other stuff
  - allow chaging query rate in gui somewhere
  - support for SANs (make sure to not keep them always alive)
  - better handle multiple volumes on one physical unit
    - have a double click pull down list that allows choosing what parts based upon crap
- - keep json config file of changes user has made
  - write release scripts
  - implement version number somewhere
  - allow removing items from chart?
  - overallping annotations :(
- 
+   - fix this by making a key (lower right) and coloring the lines
+   - add on hover popups to show name of volume and size and time?
+   - make key draggable to reposition it
+ - add loading animatinon at start
+ - add verbal warning when low on space somewhere
+ - add colored backgroudns on legend
+ - add backgrounds on line annotations
+ - move line color selection out of view model update logic
  */
 public actor Manager: Sendable {
 

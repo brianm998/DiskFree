@@ -11,7 +11,8 @@ class VolumeViewModel: ObservableObject,
     @Published var lastSize: SizeInfo?
     @Published public var isSelected = true
     @Published var sizes: [SizeInfo] = []
-
+    @Published var lineColor: Color
+    
     var id = UUID()
 
     func hash(into hasher: inout Hasher) {
@@ -22,8 +23,9 @@ class VolumeViewModel: ObservableObject,
         lhs.volume == rhs.volume
     }
 
-    public init(volume: Volume) {
+    public init(volume: Volume, color: Color) {
         self.volume = volume
+        self.lineColor = color
     }
 
     public var maxUsedGigs: UInt {
@@ -38,9 +40,17 @@ class VolumeViewModel: ObservableObject,
         return ret
     }
 
-    var chartLineText: String {
+    var chartFreeLineText: String {
         if let lastSize = self.lastSize {
             return "\(self.volume.name) - \(lastSize.freeSizeInt) free"
+        } else {
+            return self.volume.name
+        }
+    }
+    
+    var chartUsedLineText: String {
+        if let lastSize = self.lastSize {
+            return "\(self.volume.name) - \(lastSize.usedSizeInt) used"
         } else {
             return self.volume.name
         }
@@ -67,14 +77,14 @@ class PreferencesViewModel: ObservableObject {
     // this is tracked with published variables in the volume view models
     // used here for initial values, and also shadowing the view model observables
     var volumesToShow: Set<String>
-    @Published var chooseDisksToMonitor: Bool
+    @Published var showSettingsView: Bool
     @Published var showMultipleCharts: Bool
     @Published var showFreeSpace: Bool
     @Published var showUsedSpace: Bool
 
     init() {
         self.volumesToShow = []
-        self.chooseDisksToMonitor = true
+        self.showSettingsView = true
         self.showMultipleCharts = false
         self.showFreeSpace = true
         self.showUsedSpace = false
@@ -82,7 +92,7 @@ class PreferencesViewModel: ObservableObject {
 
     init(preferences: Preferences) {
         self.volumesToShow = Set(preferences.volumesToShow)
-        self.chooseDisksToMonitor = preferences.chooseDisksToMonitor
+        self.showSettingsView = preferences.showSettingsView
         self.showMultipleCharts = preferences.showMultipleCharts
         self.showFreeSpace = preferences.showFreeSpace
         self.showUsedSpace = preferences.showUsedSpace
@@ -90,7 +100,7 @@ class PreferencesViewModel: ObservableObject {
 
     var preferencesToSave: Preferences {
         Preferences(volumesToShow: Array(volumesToShow),
-                    chooseDisksToMonitor: self.chooseDisksToMonitor,
+                    showSettingsView: self.showSettingsView,
                     showMultipleCharts: self.showMultipleCharts,
                     showFreeSpace: self.showFreeSpace,
                     showUsedSpace: self.showUsedSpace)
@@ -120,22 +130,6 @@ public final class ViewModel: ObservableObject {
                 }
             }
         }
-        
-        Publishers.CombineLatest4(preferences.$chooseDisksToMonitor,
-                                  preferences.$showMultipleCharts,
-                                  preferences.$showFreeSpace,
-                                  preferences.$showUsedSpace)
-          .sink { _ in
-              print("WOOT")     // XXX save preferences here
-          }
-          .store(in: &self.cancellables)
-
-        /*
-        preferences.$volumesToShow        
-          .sink { _ in
-              print("WOOT")     // XXX save preferences here
-          }
-          .store(in: &self.cancellables)*/
     }
     
     let manager = Manager()
@@ -145,15 +139,40 @@ public final class ViewModel: ObservableObject {
     let seconds = 8            // XXX make this a published variable
 
     var newVolumeSizes: VolumeRecords = [:]
-    
+
+    let lineColors: [Color] =
+      [
+        .green,
+        .blue,
+        .cyan,
+        .yellow,
+        .orange,
+        .red,
+      ]
+      /*
+      [.mint,
+       .green,
+       .blue,
+       .brown,
+       .indigo,
+       .orange,
+       .pink,
+       .purple,
+       .red,
+       .teal,
+       .yellow]
+*/
     func listVolumes() {
         Task {
             do {
                 await self.loadStoredRecords()
                 let volumes = try await manager.listVolumes()
                 await MainActor.run {
+                    var colorIndex = 0
                     self.volumes.list = volumes.map {
-                        let ret = VolumeViewModel(volume: $0)
+                        let ret = VolumeViewModel(volume: $0, color: lineColors[colorIndex])
+                        colorIndex += 1
+                        if colorIndex >= lineColors.count { colorIndex = 0 }
 
                         if preferences.volumesToShow.contains($0.name) {
                             ret.isSelected = true
@@ -176,6 +195,17 @@ public final class ViewModel: ObservableObject {
     var volumesSortedEmptyFirst: [VolumeViewModel] {
         var list = self.volumes.list
         list.sort { $0.lastSize?.freeSize_k ?? 0 > $1.lastSize?.freeSize_k ?? 0 }
+
+        // apply colors here
+        var colorIndex = 0
+        for volumeViewModel in list {
+            if volumeViewModel.isSelected {
+                volumeViewModel.lineColor = lineColors[colorIndex] // XXX don't publish here
+                colorIndex += 1
+                if colorIndex >= lineColors.count { colorIndex = 0 }
+            }
+        }
+        
         return list
     }
 

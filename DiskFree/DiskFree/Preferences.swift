@@ -3,20 +3,13 @@ import Foundation
 
 public struct Preferences: Codable, Sendable {
     let volumesToShow: [String]
-    let chooseDisksToMonitor: Bool
+    let showSettingsView: Bool
     let showMultipleCharts: Bool
     let showFreeSpace: Bool
     let showUsedSpace: Bool
 }
 
 public actor PreferenceManager {
-/*
-    var volumesToShow: [String] = []
-    var chooseDisksToMonitor: Bool = true
-    var showMultipleCharts: Bool = false
-    var showFreeSpace: Bool = true
-    var showUsedSpace: Bool = false
- */
 
     private var preferences: Preferences?
     
