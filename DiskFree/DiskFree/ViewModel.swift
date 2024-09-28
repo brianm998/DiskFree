@@ -5,18 +5,24 @@ typealias VolumeRecords = [String:[SizeInfo]]
 
 class VolumeViewModel: ObservableObject,
                        Identifiable,
-                       Hashable
+                       Hashable,
+                       CustomStringConvertible
 {
     @Published var volume: Volume
     @Published var lastSize: SizeInfo?
     @Published public var isSelected = true
     @Published var sizes: [SizeInfo] = []
     @Published var lineColor: Color
+    @Published var chartFreeLineText: String = ""
     
     var id = UUID()
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(self.volume)
+    }
+
+    var description: String {
+        "\(volume.name) \(chartFreeLineText)"
     }
     
     static func == (lhs: VolumeViewModel, rhs: VolumeViewModel) -> Bool {
@@ -40,12 +46,16 @@ class VolumeViewModel: ObservableObject,
         return ret
     }
 
-    var chartFreeLineText: String {
+    func computeChartFreeLineText() {
         if let lastSize = self.lastSize {
-            return "\(self.volume.name) - \(lastSize.freeSizeInt) free"
+            chartFreeLineText = "\(self.volume.name) - \(lastSize.freeSizeInt) free"
         } else {
-            return self.volume.name
+            chartFreeLineText = self.volume.name
         }
+        if self.isSelected {
+            print("XXX volume \(volume.name) computed \(chartFreeLineText)")
+        }
+        self.objectWillChange.send()
     }
     
     var chartUsedLineText: String {
@@ -124,6 +134,8 @@ public final class ViewModel: ObservableObject {
     @Published var volumes = VolumeListViewModel()
     @Published var preferences = PreferencesViewModel()
     @Published var lowVolumes: Set<String> = []
+    @Published var volumesSortedEmptyFirst = VolumeListViewModel()
+
     
     private var cancellables: Set<AnyCancellable> = []
     
@@ -178,6 +190,12 @@ public final class ViewModel: ObservableObject {
                 await self.loadStoredRecords()
                 //say("we are now loading volumes")
                 let volumes = try await manager.listVolumes()
+
+
+                // XXX sort volumes here too instead of in volumesSortedEmptyFirst,
+                // make that just give the values
+                
+                
                 //say("we are now done loading volumes")
                 await MainActor.run {
                     var colorIndex = 0
@@ -193,6 +211,9 @@ public final class ViewModel: ObservableObject {
                         }
                         return ret
                     }
+                    self.volumesSortedEmptyFirst.list = self.volumes.list
+                    self.sortVolumesEmptyFirst()
+                    self.volumesSortedEmptyFirst.objectWillChange.send()
                     self.objectWillChange.send()
                 }
                 self.startTaskWithInterval(of: seconds)
@@ -204,21 +225,24 @@ public final class ViewModel: ObservableObject {
 
     private var task: Task<Void,Never>?
 
-    var volumesSortedEmptyFirst: [VolumeViewModel] {
-        var list = self.volumes.list
-        list.sort { $0.lastSize?.freeSize_k ?? 0 > $1.lastSize?.freeSize_k ?? 0 }
+    func sortVolumesEmptyFirst() {
+
+        volumesSortedEmptyFirst.list.sort { $0.lastSize?.freeSize_k ?? 0 > $1.lastSize?.freeSize_k ?? 0 }
 
         // apply colors here
         var colorIndex = 0
-        for volumeViewModel in list {
+      for volumeViewModel in volumesSortedEmptyFirst.list {
             if volumeViewModel.isSelected {
-                volumeViewModel.lineColor = lineColors[colorIndex] // XXX don't publish here
+                volumeViewModel.lineColor = lineColors[colorIndex]
                 colorIndex += 1
                 if colorIndex >= lineColors.count { colorIndex = 0 }
             }
         }
-        
-        return list
+        for volume in volumesSortedEmptyFirst.list {
+            if volume.isSelected {
+                print("sortVolumesEmptyFirst \(volume.volume.name) \(volume.lastSize?.gigsFree) gigs free")
+            }
+        }
     }
 
     func clearAll() {
@@ -226,7 +250,7 @@ public final class ViewModel: ObservableObject {
             volumeViewModel.isSelected = false
         }
     }
-    
+
     func selectAll() {
         for volumeViewModel in volumes.list {
             volumeViewModel.isSelected = true
@@ -329,6 +353,7 @@ public final class ViewModel: ObservableObject {
                 }
             }
             for volume in self.volumes.list {
+                volume.computeChartFreeLineText()
                 if let newSizes = newVolumeSizes[volume.volume.name] {
                     print("volume.lastSize \(volume.lastSize)")
 
@@ -340,12 +365,16 @@ public final class ViewModel: ObservableObject {
                     
                     volume.lastSize = newSizes.last
                     volume.sizes = newSizes
-                    print("updating volume \(volume.volume.name) size to \(newSizes.count)")
+                    //print("updating volume \(volume.volume.name) size to \(newSizes.count)")
                 }
             }
             self.volumes.list.sort {
                 $0.lastSize?.totalSize_k ?? 0 > $1.lastSize?.totalSize_k ?? 0
             }
+
+            self.sortVolumesEmptyFirst()
+            self.volumesSortedEmptyFirst.objectWillChange.send()
+            
             self.objectWillChange.send()
         }
     }

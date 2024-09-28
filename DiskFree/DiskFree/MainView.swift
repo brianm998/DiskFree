@@ -72,11 +72,17 @@ struct VolumeActivityView: View {
 
     var combinedChartLegend: some View {
         Group {
-            if viewModel.volumesSortedEmptyFirst.count > 0 {
+            if viewModel.volumesSortedEmptyFirst.list.count > 0 {
+                let _ = print("FUCK YOU \(viewModel.volumesSortedEmptyFirst.list)")
                 VStack(alignment: .trailing) {
-                    ForEach(viewModel.volumesSortedEmptyFirst) { volumeView in
+                    let _ = print("FUCK YOU 2")
+                    ForEach(viewModel.volumesSortedEmptyFirst.list) { volumeView in
                         if volumeView.isSelected {
-//                            HStack {
+                            //                            HStack {
+                            if volumeView.isSelected {
+                                let _ = print("FUCK YOU \(volumeView.volume.name) \(volumeView.chartFreeLineText)")
+                            }
+                            
                             Text(volumeView.chartFreeLineText)
                               .foregroundStyle(.white)
 //                            }
@@ -102,7 +108,7 @@ struct VolumeActivityView: View {
          */
 
         Chart {
-            ForEach(viewModel.volumesSortedEmptyFirst) { volumeView in
+            ForEach(viewModel.volumesSortedEmptyFirst.list) { volumeView in
                 if volumeView.isSelected {
                     if viewModel.preferences.showFreeSpace {
                         ForEach(volumeView.sizes) { sizeData in
@@ -182,7 +188,7 @@ struct VolumeActivityView: View {
     
     var multiCharts: some View {
         VStack {
-            ForEach(viewModel.volumesSortedEmptyFirst) { volumeView in
+            ForEach(viewModel.volumesSortedEmptyFirst.list) { volumeView in
                 if volumeView.isSelected {
                     HStack {
                         Chart(volumeView.sizes) { sizeData in
