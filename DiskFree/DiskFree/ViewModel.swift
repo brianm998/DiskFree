@@ -123,7 +123,8 @@ class VolumeListViewModel: ObservableObject {
 public final class ViewModel: ObservableObject {
     @Published var volumes = VolumeListViewModel()
     @Published var preferences = PreferencesViewModel()
-
+    @Published var lowVolumes: Set<String> = []
+    
     private var cancellables: Set<AnyCancellable> = []
     
     init() {
@@ -272,6 +273,44 @@ public final class ViewModel: ObservableObject {
         }
         return ret
     }
+
+    private func potentialSizeWarning(for oldSize: SizeInfo?,
+                                      and newSize: SizeInfo,
+                                      of volume: VolumeViewModel) {
+        // compare and see if we've crossed some threshold
+
+        if !preferences.soundVoiceOnErrors         { return }
+        if !volume.isSelected                      { return }
+
+        var arbitraryThresholdInGigs = 150 // make this a preference
+
+        if lowVolumes.contains(volume.volume.name) { 
+            if newSize.gigsFree > arbitraryThresholdInGigs + 10 { // XXX arbitrary
+                lowVolumes.remove(volume.volume.name)
+                say("\(volume.volume.name) is no longer low on free space.  It now has \(newSize.gigsFree) gigabytes of free space left.")
+            }
+            return
+        }
+        
+        let message = "Low Disk Space Warning.  \(volume.volume.name) is running low on free space.  It now has only \(newSize.gigsFree) gigabytes of free space left."
+        
+        if let oldSize,
+           oldSize.gigsFree >= arbitraryThresholdInGigs,
+           newSize.gigsFree < arbitraryThresholdInGigs
+        {
+            say(message, as: preferences.errorVoice)
+            print("WARNING: \(volume.volume.name) oldSize.gigsFree \(oldSize.gigsFree) newSize.gigsFree \(newSize.gigsFree)")
+            lowVolumes.insert(volume.volume.name)
+        } else if newSize.gigsFree < arbitraryThresholdInGigs {
+            // no old size
+            print("WARNING: \(volume.volume.name) newSize.gigsFree \(newSize.gigsFree)")
+            
+            say(message, as: preferences.errorVoice)
+            lowVolumes.insert(volume.volume.name)
+        } else {
+            // put out some kind of other error if it gets empty or really close to so
+        }
+    }
     
     private func viewUpdate(records: VolumeRecords, shouldSave: Bool = true) async {
         await MainActor.run {
@@ -291,6 +330,14 @@ public final class ViewModel: ObservableObject {
             }
             for volume in self.volumes.list {
                 if let newSizes = newVolumeSizes[volume.volume.name] {
+                    print("volume.lastSize \(volume.lastSize)")
+
+                    if let oldSize = volume.lastSize,
+                       let newSize = newSizes.last
+                    {
+                        potentialSizeWarning(for: oldSize, and: newSize, of: volume)
+                    }
+                    
                     volume.lastSize = newSizes.last
                     volume.sizes = newSizes
                     print("updating volume \(volume.volume.name) size to \(newSizes.count)")

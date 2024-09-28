@@ -17,11 +17,11 @@ import Foundation
    - fix this by making a key (lower right) and coloring the lines
    - add on hover popups to show name of volume and size and time?
    - make key draggable to reposition it
- - add loading animatinon at start
- - add verbal warning when low on space somewhere
- - add colored backgroudns on legend
- - add backgrounds on line annotations
+ - add loading animation at start
+ * add colored backgroudns on legend
+   - could look better still
  - move line color selection out of view model update logic
+ - key does not update, at all :(
  */
 public actor Manager: Sendable {
 
