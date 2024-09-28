@@ -138,7 +138,6 @@ public final class ViewModel: ObservableObject {
     @Published var volumes = VolumeListViewModel()
     @Published var preferences = PreferencesViewModel()
     @Published var lowVolumes: Set<String> = []
-    @Published var volumesSortedEmptyFirst = VolumeListViewModel()
     
     private var cancellables: Set<AnyCancellable> = []
     
@@ -164,28 +163,6 @@ public final class ViewModel: ObservableObject {
 
     var newVolumeSizes: VolumeRecords = [:]
 
-    let lineColors: [Color] =
-      [
-        .green,
-        .blue,
-        .cyan,
-        .yellow,
-        .orange,
-        .red,
-      ]
-      /*
-      [.mint,
-       .green,
-       .blue,
-       .brown,
-       .indigo,
-       .orange,
-       .pink,
-       .purple,
-       .red,
-       .teal,
-       .yellow]
-*/
     func listVolumes() {
         Task {
             do {
@@ -194,11 +171,6 @@ public final class ViewModel: ObservableObject {
                 //say("we are now loading volumes")
                 let volumes = try await manager.listVolumes()
 
-
-                // XXX sort volumes here too instead of in volumesSortedEmptyFirst,
-                // make that just give the values
-                
-                
                 //say("we are now done loading volumes")
                 await MainActor.run {
                     var colorIndex = 0
@@ -214,9 +186,6 @@ public final class ViewModel: ObservableObject {
                         }
                         return ret
                     }
-                    self.volumesSortedEmptyFirst.list = self.volumes.list
-                    self.sortVolumesEmptyFirst()
-                    self.volumesSortedEmptyFirst.objectWillChange.send()
                     self.objectWillChange.send()
                 }
                 self.startTaskWithInterval(of: seconds)
@@ -227,26 +196,6 @@ public final class ViewModel: ObservableObject {
     }
 
     private var task: Task<Void,Never>?
-
-    func sortVolumesEmptyFirst() {
-
-        volumesSortedEmptyFirst.list.sort { $0.lastSize?.freeSize_k ?? 0 > $1.lastSize?.freeSize_k ?? 0 }
-
-        // apply colors here
-        var colorIndex = 0
-      for volumeViewModel in volumesSortedEmptyFirst.list {
-            if volumeViewModel.isSelected {
-                volumeViewModel.lineColor = lineColors[colorIndex]
-                colorIndex += 1
-                if colorIndex >= lineColors.count { colorIndex = 0 }
-            }
-        }
-        for volume in volumesSortedEmptyFirst.list {
-            if volume.isSelected {
-                print("sortVolumesEmptyFirst \(volume.volume.name) \(volume.lastSize?.gigsFree) gigs free")
-            }
-        }
-    }
 
     func clearAll() {
         for volumeViewModel in volumes.list {
@@ -375,9 +324,6 @@ public final class ViewModel: ObservableObject {
                 $0.lastSize?.totalSize_k ?? 0 > $1.lastSize?.totalSize_k ?? 0
             }
 
-            self.sortVolumesEmptyFirst()
-            self.volumesSortedEmptyFirst.objectWillChange.send()
-            
             self.objectWillChange.send()
         }
     }
