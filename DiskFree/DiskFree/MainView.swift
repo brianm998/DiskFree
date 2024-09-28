@@ -66,26 +66,29 @@ struct VolumeActivityView: View {
     var combinedChartWithLegend: some View {
         ZStack(alignment: .topLeading) {
             combinedChart
-            combinedChartLegend
+            legendForCombinedChart
         }
     }
 
-    var combinedChartLegend: some View {
+    private var volumesSortedByEmptyFirst: [Binding<VolumeViewModel>] {
+        let list: [Binding<VolumeViewModel>] = $viewModel.volumes.list.map { $volume in return $volume }
+
+        let ret = list.sorted { ($a: Binding<VolumeViewModel>, $b: Binding<VolumeViewModel>) in
+            a.lastFreeSize() > b.lastFreeSize()
+        }
+        
+        return ret
+    }
+    
+    var legendForCombinedChart: some View {
         Group {
-            if viewModel.volumesSortedEmptyFirst.list.count > 0 {
-                let _ = print("FUCK YOU \(viewModel.volumesSortedEmptyFirst.list)")
+            if volumesSortedByEmptyFirst.count > 0 {
                 VStack(alignment: .trailing) {
-                    let _ = print("FUCK YOU 2")
-                    ForEach(viewModel.volumesSortedEmptyFirst.list) { volumeView in
+                    ForEach(volumesSortedByEmptyFirst) { $volumeView in
                         if volumeView.isSelected {
-                            //                            HStack {
-                            if volumeView.isSelected {
-                                let _ = print("FUCK YOU \(volumeView.volume.name) \(volumeView.chartFreeLineText)")
-                            }
                             
                             Text(volumeView.chartFreeLineText)
                               .foregroundStyle(.white)
-//                            }
 //                              .padding(2)
 //                              .frame(maxWidth: .infinity)
                               .background(volumeView.lineColor)
@@ -108,7 +111,7 @@ struct VolumeActivityView: View {
          */
 
         Chart {
-            ForEach(viewModel.volumesSortedEmptyFirst.list) { volumeView in
+            ForEach(viewModel.volumes.list) { volumeView in
                 if volumeView.isSelected {
                     if viewModel.preferences.showFreeSpace {
                         ForEach(volumeView.sizes) { sizeData in
@@ -188,7 +191,7 @@ struct VolumeActivityView: View {
     
     var multiCharts: some View {
         VStack {
-            ForEach(viewModel.volumesSortedEmptyFirst.list) { volumeView in
+            ForEach(volumesSortedByEmptyFirst) { $volumeView in
                 if volumeView.isSelected {
                     HStack {
                         Chart(volumeView.sizes) { sizeData in

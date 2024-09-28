@@ -21,6 +21,10 @@ class VolumeViewModel: ObservableObject,
         hasher.combine(self.volume)
     }
 
+    func lastFreeSize() -> UInt {
+        self.lastSize?.freeSize_k ?? 0
+    }
+    
     var description: String {
         "\(volume.name) \(chartFreeLineText)"
     }
@@ -135,7 +139,6 @@ public final class ViewModel: ObservableObject {
     @Published var preferences = PreferencesViewModel()
     @Published var lowVolumes: Set<String> = []
     @Published var volumesSortedEmptyFirst = VolumeListViewModel()
-
     
     private var cancellables: Set<AnyCancellable> = []
     
