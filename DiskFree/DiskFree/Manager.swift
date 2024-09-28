@@ -17,9 +17,9 @@ import Foundation
    - fix this by making a key (lower right) and coloring the lines
    - add on hover popups to show name of volume and size and time?
    - make key draggable to reposition it
- - add loading animation at start
- * add colored backgroudns on legend
-   - could look better still
+  - add loading animation at start
+  - missing visual error messages to user
+  - also do visual warning when low on space 
  */
 public actor Manager: Sendable {
 

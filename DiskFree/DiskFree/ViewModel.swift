@@ -14,6 +14,7 @@ class VolumeViewModel: ObservableObject,
     @Published var sizes: [SizeInfo] = []
     @Published var lineColor: Color
     @Published var chartFreeLineText: String = ""
+    @Published var isMostEmpty = false
     
     var id = UUID()
 
@@ -47,6 +48,20 @@ class VolumeViewModel: ObservableObject,
     public var maxFreeGigs: UInt {
         var ret: UInt = 0
         for size in sizes { if size.gigsFree > ret { ret = size.gigsFree } }
+        return ret
+    }
+
+    public var minUsedGigs: UInt {
+        var ret: UInt = UInt.max
+        if sizes.count == 0 { return 0 }
+        for size in sizes { if size.gigsUsed < ret { ret = size.gigsUsed } }
+        return ret
+    }
+
+    public var minFreeGigs: UInt {
+        var ret: UInt = 8000000
+        if sizes.count == 0 { return 0 }
+        for size in sizes { if size.gigsFree < ret { ret = size.gigsFree } }
         return ret
     }
 
@@ -84,6 +99,24 @@ class VolumeViewModel: ObservableObject,
                 return 0
             }
         }
+    }
+
+    public func minGigs(showFree: Bool, showUsed: Bool) -> UInt {
+        var ret: UInt = 0
+        if showFree {
+            if showUsed {
+                ret = min(minFreeGigs, minUsedGigs)
+            } else {
+                ret = minFreeGigs
+            }
+        } else {
+            if showUsed {
+                ret = minUsedGigs
+            } else {
+                ret = 0
+            }
+        }
+        return ret
     }
 }
 
@@ -198,6 +231,27 @@ public final class ViewModel: ObservableObject {
 
     private var task: Task<Void,Never>?
 
+    public func minGigs(showFree: Bool, showUsed: Bool) -> UInt {
+        var ret = UInt.max<<8
+        if volumes.list.count == 0 { return 0 }
+        for volumeViewModel in volumes.list {
+            let maxGigs = volumeViewModel.minGigs(showFree: showFree, showUsed: showUsed)
+            if maxGigs < ret { ret = maxGigs }
+        }
+        return ret
+    }
+
+    public func maxGigs(showFree: Bool, showUsed: Bool) -> UInt {
+        var ret: UInt = 0
+        if volumes.list.count == 0 { return UInt.max<<8 }
+        for volumeViewModel in volumes.list {
+            let maxGigs = volumeViewModel.maxGigs(showFree: showFree, showUsed: showUsed)
+            if maxGigs > ret { ret = maxGigs }
+        }
+
+        return ret
+    }
+    
     func clearAll() {
         for volumeViewModel in volumes.list {
             volumeViewModel.isSelected = false
@@ -357,12 +411,21 @@ public final class ViewModel: ObservableObject {
             }
             
             var colorIndex = 0
+            var lastSelectedViewModel: VolumeViewModel? = nil
             for var volumeViewModel in volumesEmptyFirst {
+                volumeViewModel.isMostEmpty = false
                 if volumeViewModel.isSelected {
                     volumeViewModel.lineColor = lineColors[colorIndex]
                     colorIndex += 1
                     if colorIndex >= lineColors.count { colorIndex = 0 }
+                    lastSelectedViewModel = volumeViewModel
+                } else {
+                    volumeViewModel.isMostEmpty = false
                 }
+            }
+
+            if let lastSelectedViewModel {
+                lastSelectedViewModel.isMostEmpty = true
             }
 
             self.objectWillChange.send()

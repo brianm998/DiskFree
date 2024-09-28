@@ -52,8 +52,14 @@ struct VolumeActivityView: View {
                        endPoint: .bottom)
     }
 
-    
-    
+    func gradient(with color: Color) -> LinearGradient {
+        LinearGradient(gradient: Gradient(colors: [color.opacity(0.3),
+                                                   color.opacity(0.0001)]),
+                       startPoint: .top,
+                       endPoint: .bottom)
+    }
+
+        
     var body: some View {
       if viewModel.preferences.showMultipleCharts {
             self.multiCharts
@@ -130,7 +136,25 @@ struct VolumeActivityView: View {
                             )
                               .interpolationMethod(.catmullRom)
                               .foregroundStyle(volumeView.lineColor)
-                              .lineStyle(StrokeStyle(lineWidth: 1, dash: [2]))
+                              .lineStyle(StrokeStyle(lineWidth: 6,
+                                                     lineCap: .round, // .butt .square
+                                                     lineJoin: .round, //.miter .bevel
+                                                     miterLimit: 0,
+                                                     dash: [12],
+                                                     dashPhase: 0))
+
+                            if volumeView.isMostEmpty {
+                                AreaMark(
+                                  x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
+			          y: .value("free", sizeData.gigsFree),
+                                  series: .value(volumeView.volume.name,
+                                                 "\(volumeView.volume.name)1"),
+                                  stacking: .unstacked
+			        )
+			          .lineStyle(StrokeStyle(lineWidth: 2))
+			          .foregroundStyle(self.gradient(with: volumeView.lineColor))
+                                  .interpolationMethod(.cardinal)
+                            }
                         }
                         if volumeView.sizes.count > 0 {
                             let sizeData = volumeView.sizes[0]
@@ -138,8 +162,8 @@ struct VolumeActivityView: View {
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
 		              y: .value("Gigabytes Free", sizeData.gigsFree)
                             )
-                              .symbolSize(2)
-			      .foregroundStyle(.mint)
+                              .symbolSize(24)
+                              .foregroundStyle(volumeView.lineColor)
                               .annotation(position: .topTrailing, alignment: .bottomLeading) {
                                   Text(volumeView.volume.name)
                                     .foregroundStyle(volumeView.lineColor)
@@ -154,8 +178,8 @@ struct VolumeActivityView: View {
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
 		              y: .value("Gigabytes Free", sizeData.gigsFree)
                             )
-                              .symbolSize(2)
-			      .foregroundStyle(.mint)
+                              .symbolSize(24)
+                              .foregroundStyle(volumeView.lineColor)
                               .annotation(position: .topLeading, alignment: .bottomLeading) {
                                   Text(volumeView.volume.name)
                                     .foregroundStyle(volumeView.lineColor)
@@ -193,7 +217,26 @@ struct VolumeActivityView: View {
                 }
             }
         }
-        .chartYAxisLabel("Gigabytes") 
+          .chartYScale(domain: viewModel.minGigs(showFree: viewModel.preferences.showFreeSpace,
+                                                 showUsed: viewModel.preferences.showUsedSpace)...viewModel.maxGigs(showFree: viewModel.preferences.showFreeSpace,
+                                                                                                                     showUsed: viewModel.preferences.showUsedSpace)+20)
+
+          .chartYAxisLabel("Gigabytes")
+          .chartOverlay { (chartProxy: ChartProxy) in
+              Color.clear
+                .onContinuousHover { hoverPhase in
+                    switch hoverPhase {
+                    case .active(let location):
+                        if let (foo, bar) = chartProxy.value(at: location,
+                                                             as: (String, String).self) {
+                            print("FUCKING foo \(foo) \(bar)")
+                        }
+
+                    case .ended:
+                        break
+                    }
+                }
+          }
     }
     
     var multiCharts: some View {
@@ -225,8 +268,9 @@ struct VolumeActivityView: View {
 			          .interpolationMethod(.cardinal)
                             }
                         }
-                          .chartYScale(domain:0...volumeView.maxGigs(showFree: viewModel.preferences.showFreeSpace,
-                                                                     showUsed: viewModel.preferences.showUsedSpace))
+                          .chartYScale(domain:volumeView.minGigs(showFree: viewModel.preferences.showFreeSpace,
+                                                                 showUsed: viewModel.preferences.showUsedSpace)...volumeView.maxGigs(showFree: viewModel.preferences.showFreeSpace,
+                                                                                                                                     showUsed: viewModel.preferences.showUsedSpace))
                         VStack(alignment: .leading) {
                             Text(volumeView.volume.name)
                             if let volumeSize = volumeView.lastSize {
