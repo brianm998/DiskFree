@@ -66,7 +66,7 @@ struct VolumeActivityView: View {
     var combinedChartWithLegend: some View {
         ZStack(alignment: .topLeading) {
             combinedChart
-            legendForCombinedChart
+            legendForCombinedChart // XXX make this draggable
         }
     }
 
@@ -83,22 +83,29 @@ struct VolumeActivityView: View {
     var legendForCombinedChart: some View {
         Group {
             if volumesSortedByEmptyFirst.count > 0 {
-                VStack(alignment: .trailing) {
-                    ForEach(volumesSortedByEmptyFirst) { $volumeView in
-                        if volumeView.isSelected {
-                            
-                            Text(volumeView.chartFreeLineText)
-                              .foregroundStyle(.white)
-//                              .padding(2)
-//                              .frame(maxWidth: .infinity)
-                              .background(volumeView.lineColor)
+                VStack(alignment: .leading) {
+                    Text("Free Space")
+                    Grid(alignment: .leading) {
+                        ForEach(volumesSortedByEmptyFirst) { $volumeView in
+                            if volumeView.isSelected {
+                                GridRow {
+                                    Text(volumeView.volume.name)
+                                      .foregroundStyle(volumeView.lineColor)
+//                                      .foregroundStyle(.white)
+//                                      .padding(2)
+                            //          .background(volumeView.lineColor)
+                                    Text(volumeView.chartFreeLineText)
+                                      .foregroundStyle(volumeView.lineColor)
+                                }
+                            }
                         }
                     }
+                    //        .frame(width: 50, height: 100)
                 }
-                //        .frame(width: 50, height: 100)
-                  .border(.black, width: 1)
-                  .background(.gray)
-                  .opacity(0.8)
+                  .padding(4)
+                      .border(.black, width: 1)
+                      .background(.white)
+                      .opacity(0.8)
             }
         }
     }

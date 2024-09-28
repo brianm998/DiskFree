@@ -20,8 +20,6 @@ import Foundation
  - add loading animation at start
  * add colored backgroudns on legend
    - could look better still
- - move line color selection out of view model update logic
- - key does not update, at all :(
  */
 public actor Manager: Sendable {
 

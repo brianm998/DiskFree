@@ -52,9 +52,9 @@ class VolumeViewModel: ObservableObject,
 
     func computeChartFreeLineText() {
         if let lastSize = self.lastSize {
-            chartFreeLineText = "\(self.volume.name) - \(lastSize.freeSizeInt) free"
+            chartFreeLineText = "\(lastSize.freeSizeInt)"
         } else {
-            chartFreeLineText = self.volume.name
+            chartFreeLineText = ""
         }
         if self.isSelected {
             print("XXX volume \(volume.name) computed \(chartFreeLineText)")
