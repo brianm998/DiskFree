@@ -80,21 +80,21 @@ public actor Manager: Sendable {
     }
 
     func recordVolumeSizes() async throws -> [String:[SizeInfo]] {
-        print("record volume sizes volumes.count \(volumes.count)")
+        //print("record volume sizes volumes.count \(volumes.count)")
         // use the same timestamp for all of them,
         // instead of having them be very slightly different
         let timestamp = Date().timeIntervalSince1970
         for volume in volumes {
-            print("record size of \(volume.name)")
+            //print("record size of \(volume.name)")
             if let sizeOfVolume = try await self.sizeOf(volume: volume, at: timestamp) {
                 if var existingList = volumeSizes[volume.name] {
-                    print("appending to volume list volumeSizes[\(volume.name)].count = \(volumeSizes[volume.name]?.count ?? -1)")
+                    //print("appending to volume list volumeSizes[\(volume.name)].count = \(volumeSizes[volume.name]?.count ?? -1)")
 
                     existingList.append(sizeOfVolume)  
                     volumeSizes[volume.name] = existingList
-                    print("appending to volume list volumeSizes[\(volume.name)].count = \(volumeSizes[volume.name]?.count ?? -1)")
+                    //print("appending to volume list volumeSizes[\(volume.name)].count = \(volumeSizes[volume.name]?.count ?? -1)")
                 } else {
-                    print("NOT appending to volume list volumeSizes[\(volume.name)]")
+                    //print("NOT appending to volume list volumeSizes[\(volume.name)]")
                     volumeSizes[volume.name] = [sizeOfVolume]
                 }
             }

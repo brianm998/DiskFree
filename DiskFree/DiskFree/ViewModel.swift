@@ -16,6 +16,7 @@ class VolumeViewModel: ObservableObject,
     @Published var chartFreeLineText: String = ""
     @Published var isMostEmpty = false
     @Published var isMostFull = false
+    let preferences: PreferencesViewModel
     
     var id = UUID()
 
@@ -35,11 +36,16 @@ class VolumeViewModel: ObservableObject,
         lhs.volume == rhs.volume
     }
 
-    public init(volume: Volume, color: Color) {
+    public init(volume: Volume, color: Color, preferences: PreferencesViewModel) {
         self.volume = volume
         self.lineColor = color
+        self.preferences = preferences
     }
 
+    public var showLowSpaceWarning: Bool {
+        isBelow(gigs: self.preferences.lowSpaceWarningThresholdGigs)
+    }
+    
     public func isBelow(gigs: UInt) -> Bool {
         if let lastSize {
             return lastSize.gigsFree < gigs
@@ -78,9 +84,6 @@ class VolumeViewModel: ObservableObject,
             chartFreeLineText = "\(lastSize.freeSizeInt)"
         } else {
             chartFreeLineText = ""
-        }
-        if self.isSelected {
-            print("XXX volume \(volume.name) computed \(chartFreeLineText)")
         }
         self.objectWillChange.send()
     }
@@ -129,8 +132,6 @@ class VolumeViewModel: ObservableObject,
         if ret > 50 {
             ret -= 20
         }
-        
-        print("MIN GIGS \(ret)")
 
         return ret
     }
@@ -241,7 +242,9 @@ public final class ViewModel: ObservableObject {
                 await MainActor.run {
                     var colorIndex = 0
                     self.volumes.list = volumes.map {
-                        let ret = VolumeViewModel(volume: $0, color: lineColors[colorIndex])
+                        let ret = VolumeViewModel(volume: $0,
+                                                  color: lineColors[colorIndex],
+                                                  preferences: preferences)
                         colorIndex += 1
                         if colorIndex >= lineColors.count { colorIndex = 0 }
 
@@ -404,6 +407,7 @@ public final class ViewModel: ObservableObject {
 
     private func viewUpdate(records: VolumeRecords, shouldSave: Bool = true) async {
         await MainActor.run {
+            let startTime = Date().timeIntervalSince1970
             // merge them in and apply a time threshold
             self.newVolumeSizes = mergeRecords(records, self.newVolumeSizes)
 
@@ -421,7 +425,7 @@ public final class ViewModel: ObservableObject {
             for volume in self.volumes.list {
                 volume.computeChartFreeLineText()
                 if let newSizes = newVolumeSizes[volume.volume.name] {
-                    print("volume.lastSize \(volume.lastSize)")
+                    //print("volume.lastSize \(volume.lastSize)")
 
                     if let oldSize = volume.lastSize,
                        let newSize = newSizes.last
@@ -474,6 +478,8 @@ public final class ViewModel: ObservableObject {
                 firstSelectedViewModel.isMostEmpty = true
             }
             self.objectWillChange.send()
+            let endTime = Date().timeIntervalSince1970
+            print("view update took \(endTime-startTime) seconds")
         }
     }
     
@@ -482,7 +488,7 @@ public final class ViewModel: ObservableObject {
         var storedRecords: VolumeRecords?
         do {
             storedRecords = try await recordKeeper?.loadRecords() 
-            print("loaded stored records \(storedRecords?.count)")
+//            print("loaded stored records \(storedRecords?.count)")
         } catch {
             print("error loading stored records: \(error)")
         }

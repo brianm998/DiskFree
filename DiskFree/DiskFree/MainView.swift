@@ -102,17 +102,12 @@ struct VolumeActivityView: View {
 //                                      .foregroundStyle(.white)
 //                                      .padding(2)
 //          .background(volumeView.lineColor)
-                                    if volumeView.isBelow(gigs: viewModel.preferences.lowSpaceWarningThresholdGigs) {
                                         Text(volumeView.chartFreeLineText)
                                           .font(.system(size: 36))
-                                          .foregroundStyle(.red)
-                                          .blinking(duration: 0.4)
+                                          .foregroundStyle(volumeView.showLowSpaceWarning ? .red : volumeView.lineColor)
+                                          .blinking(if: volumeView.showLowSpaceWarning,
+                                                      duration: 0.4)
     
-                                    } else {
-                                        Text(volumeView.chartFreeLineText)
-                                          .font(.system(size: 36))
-                                          .foregroundStyle(volumeView.lineColor)
-                                    }
                    // never ends :(                .animation(Animation.easeInOut(duration:0.4).repeatForever(autoreverses:true))
                                     
                                 }
@@ -182,10 +177,6 @@ struct VolumeActivityView: View {
                               .annotation(position: .leading, alignment: .bottom) {
                                   Text(volumeView.volume.name)
                                     .foregroundStyle(volumeView.lineColor)
-//                                    .padding(2)
-                                    .background(Color(red: 236/255,
-                                                      green: 235/255,
-                                                      blue: 235/255))
                               } 
                         }
                         if let sizeData = volumeView.lastSize {
@@ -198,9 +189,8 @@ struct VolumeActivityView: View {
                               .annotation(position: .trailing, alignment: .bottom) {
                                   Text(volumeView.volume.name)
                                     .foregroundStyle(volumeView.lineColor)
-                                    .background(Color(red: 236/255,
-                                                      green: 235/255,
-                                                      blue: 235/255))
+                                    .blinking(if: volumeView.showLowSpaceWarning,
+                                              duration: 0.4)
                               } 
                         }
                     }
@@ -240,6 +230,7 @@ struct VolumeActivityView: View {
                                                                                                                      showUsed: viewModel.preferences.showUsedSpace)+20)
 
           .chartYAxisLabel("Gigabytes")
+        /* XXX doesn't work :(
           .chartOverlay { (chartProxy: ChartProxy) in
               Color.clear
                 .onContinuousHover { hoverPhase in
@@ -254,7 +245,7 @@ struct VolumeActivityView: View {
                         break
                     }
                 }
-          }
+          }*/
     }
     
     var multiCharts: some View {
@@ -405,7 +396,13 @@ struct BlinkViewModifier: ViewModifier {
 }
 
 extension View {
-    func blinking(duration: Double = 0.5) -> some View {
-        modifier(BlinkViewModifier(duration: duration))
+    func blinking(if shouldBlink: Bool = true, duration: Double = 0.5) -> some View {
+        Group {
+            if shouldBlink {
+                modifier(BlinkViewModifier(duration: duration))
+            } else {
+                self
+            }
+        }
     }
 }
