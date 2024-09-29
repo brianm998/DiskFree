@@ -40,6 +40,13 @@ class VolumeViewModel: ObservableObject,
         self.lineColor = color
     }
 
+    public func isBelow(gigs: UInt) -> Bool {
+        if let lastSize {
+            return lastSize.gigsFree < gigs
+        }
+        return false            // don't want to create false positives
+    }
+    
     public var maxUsedGigs: UInt {
         var ret: UInt = 0
         for size in sizes { if size.gigsUsed > ret { ret = size.gigsUsed } }
@@ -117,6 +124,14 @@ class VolumeViewModel: ObservableObject,
                 ret = 0
             }
         }
+
+        // give some space at the bottom of the graph
+        if ret > 50 {
+            ret -= 20
+        }
+        
+        print("MIN GIGS \(ret)")
+
         return ret
     }
 }
@@ -131,6 +146,10 @@ class PreferencesViewModel: ObservableObject {
     @Published var showUsedSpace: Bool
     @Published var soundVoiceOnErrors: Bool
     @Published var errorVoice: VoiceActor.Voice
+    @Published var legendFontSize: Int
+    @Published var pollIntervalSeconds: Int
+    @Published var lowSpaceWarningThresholdGigs: UInt
+    @Published var lowSpaceErrorThresholdGigs: UInt
 
     init() {
         self.volumesToShow = []
@@ -140,6 +159,10 @@ class PreferencesViewModel: ObservableObject {
         self.showUsedSpace = false
         self.soundVoiceOnErrors = true
         self.errorVoice = .Ellen // random
+        self.legendFontSize = 24
+        self.pollIntervalSeconds = 12
+        self.lowSpaceWarningThresholdGigs = 100
+        self.lowSpaceErrorThresholdGigs = 20
     }
 
     init(preferences: Preferences) {
@@ -150,6 +173,10 @@ class PreferencesViewModel: ObservableObject {
         self.showUsedSpace = preferences.showUsedSpace
         self.errorVoice = preferences.errorVoice
         self.soundVoiceOnErrors = preferences.soundVoiceOnErrors
+        self.legendFontSize = preferences.legendFontSize
+        self.pollIntervalSeconds = preferences.pollIntervalSeconds
+        self.lowSpaceWarningThresholdGigs = preferences.lowSpaceWarningThresholdGigs
+        self.lowSpaceErrorThresholdGigs = preferences.lowSpaceErrorThresholdGigs
     }
 
     var preferencesToSave: Preferences {
@@ -159,7 +186,11 @@ class PreferencesViewModel: ObservableObject {
                     showFreeSpace: self.showFreeSpace,
                     showUsedSpace: self.showUsedSpace,
                     soundVoiceOnErrors: self.soundVoiceOnErrors,
-                    errorVoice: self.errorVoice)
+                    errorVoice: self.errorVoice,
+                    legendFontSize: self.legendFontSize,
+                    pollIntervalSeconds: self.pollIntervalSeconds,
+                    lowSpaceWarningThresholdGigs: self.lowSpaceWarningThresholdGigs,
+                    lowSpaceErrorThresholdGigs: self.lowSpaceErrorThresholdGigs)
     }
 }
 
@@ -223,7 +254,7 @@ public final class ViewModel: ObservableObject {
                     }
                     self.objectWillChange.send()
                 }
-                self.startTaskWithInterval(of: seconds)
+                self.startTaskWithInterval(of: preferences.pollIntervalSeconds)
             } catch {
                 print("ERROR: \(error)")
             }
@@ -236,8 +267,10 @@ public final class ViewModel: ObservableObject {
         var ret = UInt.max<<8
         if volumes.list.count == 0 { return 0 }
         for volumeViewModel in volumes.list {
-            let maxGigs = volumeViewModel.minGigs(showFree: showFree, showUsed: showUsed)
-            if maxGigs < ret { ret = maxGigs }
+            if volumeViewModel.isSelected {
+                let maxGigs = volumeViewModel.minGigs(showFree: showFree, showUsed: showUsed)
+                if maxGigs < ret { ret = maxGigs }
+            }
         }
         return ret
     }
@@ -246,8 +279,10 @@ public final class ViewModel: ObservableObject {
         var ret: UInt = 0
         if volumes.list.count == 0 { return UInt.max<<8 }
         for volumeViewModel in volumes.list {
-            let maxGigs = volumeViewModel.maxGigs(showFree: showFree, showUsed: showUsed)
-            if maxGigs > ret { ret = maxGigs }
+            if volumeViewModel.isSelected {
+                let maxGigs = volumeViewModel.maxGigs(showFree: showFree, showUsed: showUsed)
+                if maxGigs > ret { ret = maxGigs }
+            }
         }
 
         return ret
@@ -287,7 +322,7 @@ public final class ViewModel: ObservableObject {
         var processedVolumes: Set<String> = []
 
         var ret: VolumeRecords = [:]
-        
+
         for (volume, sizeInfoList1) in records1 {
             processedVolumes.insert(volume)
             if let sizeInfoList2 = records2[volume] {
@@ -309,15 +344,14 @@ public final class ViewModel: ObservableObject {
     private func potentialSizeWarning(for oldSize: SizeInfo?,
                                       and newSize: SizeInfo,
                                       of volume: VolumeViewModel) {
-        // compare and see if we've crossed some threshold
-
         if !preferences.soundVoiceOnErrors         { return }
         if !volume.isSelected                      { return }
 
-        var arbitraryThresholdInGigs = 150 // make this a preference
+        // compare and see if we've crossed this threshold
+        let warningThreshold = preferences.lowSpaceWarningThresholdGigs
 
         if lowVolumes.contains(volume.volume.name) { 
-            if newSize.gigsFree > arbitraryThresholdInGigs + 10 { // XXX arbitrary
+            if newSize.gigsFree > warningThreshold {
                 lowVolumes.remove(volume.volume.name)
                 say("\(volume.volume.name) is no longer low on free space.  It now has \(newSize.gigsFree) gigabytes of free space left.")
             }
@@ -327,13 +361,13 @@ public final class ViewModel: ObservableObject {
         let message = "Low Disk Space Warning.  \(volume.volume.name) is running low on free space.  It now has only \(newSize.gigsFree) gigabytes of free space left."
         
         if let oldSize,
-           oldSize.gigsFree >= arbitraryThresholdInGigs,
-           newSize.gigsFree < arbitraryThresholdInGigs
+           oldSize.gigsFree >= warningThreshold,
+           newSize.gigsFree < warningThreshold
         {
             say(message, as: preferences.errorVoice)
             print("WARNING: \(volume.volume.name) oldSize.gigsFree \(oldSize.gigsFree) newSize.gigsFree \(newSize.gigsFree)")
             lowVolumes.insert(volume.volume.name)
-        } else if newSize.gigsFree < arbitraryThresholdInGigs {
+        } else if newSize.gigsFree < warningThreshold {
             // no old size
             print("WARNING: \(volume.volume.name) newSize.gigsFree \(newSize.gigsFree)")
             

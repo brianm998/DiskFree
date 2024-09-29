@@ -54,9 +54,9 @@ struct VolumeActivityView: View {
 
     func gradient(with color: Color) -> LinearGradient {
         LinearGradient(gradient: Gradient(colors: [color.opacity(0.3),
-                                                   color.opacity(0.0001)]),
-                       startPoint: .top,
-                       endPoint: .bottom)
+                                                   color.opacity(0.0002)]),
+                       startPoint: UnitPoint(x: 0, y: 0),
+                       endPoint: UnitPoint(x: 0, y: 0.8))
     }
 
         
@@ -91,17 +91,30 @@ struct VolumeActivityView: View {
             if volumesSortedByEmptyFirst.count > 0 {
                 VStack(alignment: .leading) {
                     Text("Free Space")
+                      .font(.system(size: 36))
                     Grid(alignment: .leading) {
                         ForEach(volumesSortedByEmptyFirst) { $volumeView in
                             if volumeView.isSelected {
                                 GridRow {
                                     Text(volumeView.volume.name)
+                                      .font(.system(size: 36))
                                       .foregroundStyle(volumeView.lineColor)
 //                                      .foregroundStyle(.white)
 //                                      .padding(2)
-                            //          .background(volumeView.lineColor)
-                                    Text(volumeView.chartFreeLineText)
-                                      .foregroundStyle(volumeView.lineColor)
+//          .background(volumeView.lineColor)
+                                    if volumeView.isBelow(gigs: viewModel.preferences.lowSpaceWarningThresholdGigs) {
+                                        Text(volumeView.chartFreeLineText)
+                                          .font(.system(size: 36))
+                                          .foregroundStyle(.red)
+                                          .blinking(duration: 0.4)
+    
+                                    } else {
+                                        Text(volumeView.chartFreeLineText)
+                                          .font(.system(size: 36))
+                                          .foregroundStyle(volumeView.lineColor)
+                                    }
+                   // never ends :(                .animation(Animation.easeInOut(duration:0.4).repeatForever(autoreverses:true))
+                                    
                                 }
                             }
                         }
@@ -180,7 +193,7 @@ struct VolumeActivityView: View {
                             )
                               .symbolSize(24)
                               .foregroundStyle(volumeView.lineColor)
-                              .annotation(position: .topLeading, alignment: .bottomLeading) {
+                              .annotation(position: .trailing, alignment: .bottomLeading) {
                                   Text(volumeView.volume.name)
                                     .foregroundStyle(volumeView.lineColor)
                                     .background(Color(red: 236/255,
@@ -217,6 +230,9 @@ struct VolumeActivityView: View {
                 }
             }
         }
+          .chartXAxis {
+              AxisMarks(preset: .aligned) // XXX doesn't help :(
+          }
           .chartYScale(domain: viewModel.minGigs(showFree: viewModel.preferences.showFreeSpace,
                                                  showUsed: viewModel.preferences.showUsedSpace)...viewModel.maxGigs(showFree: viewModel.preferences.showFreeSpace,
                                                                                                                      showUsed: viewModel.preferences.showUsedSpace)+20)
@@ -370,5 +386,24 @@ struct VolumeChoiceItemView: View {
               }
             
         }
+    }
+}
+
+
+struct BlinkViewModifier: ViewModifier {
+    let duration: Double
+    @State private var blinking: Bool = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(blinking ? 0.02 : 1)
+            .animation(.easeInOut(duration: duration).repeatForever(), value: blinking)
+            .onAppear { blinking.toggle() }
+    }
+}
+
+extension View {
+    func blinking(duration: Double = 0.5) -> some View {
+        modifier(BlinkViewModifier(duration: duration))
     }
 }
