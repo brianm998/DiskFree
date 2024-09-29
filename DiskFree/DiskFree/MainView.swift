@@ -54,7 +54,7 @@ struct VolumeActivityView: View {
 
     func gradient(with color: Color) -> LinearGradient {
         LinearGradient(gradient: Gradient(colors: [color.opacity(0.3),
-                                                   color.opacity(0.0002)]),
+                                                   color.opacity(0.002)]),
                        startPoint: UnitPoint(x: 0, y: 0),
                        endPoint: UnitPoint(x: 0, y: 0.8))
     }
@@ -137,6 +137,8 @@ struct VolumeActivityView: View {
          */
 
         Chart {
+            let lineWidth = 6
+            let dotSize = 24//lineWidth*4
             ForEach(viewModel.volumes.list) { volumeView in
                 if volumeView.isSelected {
                     if viewModel.preferences.showFreeSpace {
@@ -149,7 +151,7 @@ struct VolumeActivityView: View {
                             )
                               .interpolationMethod(.catmullRom)
                               .foregroundStyle(volumeView.lineColor)
-                              .lineStyle(StrokeStyle(lineWidth: 6,
+                              .lineStyle(StrokeStyle(lineWidth: 4,
                                                      lineCap: .round, // .butt .square
                                                      lineJoin: .round, //.miter .bevel
                                                      miterLimit: 0,
@@ -175,9 +177,9 @@ struct VolumeActivityView: View {
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
 		              y: .value("Gigabytes Free", sizeData.gigsFree)
                             )
-                              .symbolSize(24)
+                              .symbolSize(16)
                               .foregroundStyle(volumeView.lineColor)
-                              .annotation(position: .topTrailing, alignment: .bottomLeading) {
+                              .annotation(position: .leading, alignment: .bottom) {
                                   Text(volumeView.volume.name)
                                     .foregroundStyle(volumeView.lineColor)
 //                                    .padding(2)
@@ -191,9 +193,9 @@ struct VolumeActivityView: View {
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
 		              y: .value("Gigabytes Free", sizeData.gigsFree)
                             )
-                              .symbolSize(24)
+                              .symbolSize(16)
                               .foregroundStyle(volumeView.lineColor)
-                              .annotation(position: .trailing, alignment: .bottomLeading) {
+                              .annotation(position: .trailing, alignment: .bottom) {
                                   Text(volumeView.volume.name)
                                     .foregroundStyle(volumeView.lineColor)
                                     .background(Color(red: 236/255,
