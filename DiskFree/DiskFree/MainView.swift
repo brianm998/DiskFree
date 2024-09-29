@@ -70,9 +70,9 @@ struct VolumeActivityView: View {
 
     
     var combinedChartWithLegend: some View {
-        ZStack(alignment: .topLeading) {
+        HStack(alignment: .top) {
             combinedChart
-            legendForCombinedChart // XXX make this draggable
+            legendForCombinedChart
         }
     }
 
@@ -116,10 +116,6 @@ struct VolumeActivityView: View {
                     }
                     //        .frame(width: 50, height: 100)
                 }
-                  .padding(4)
-                      .border(.black, width: 1)
-                      .background(.white)
-                      .opacity(0.95)
             }
         }
     }
