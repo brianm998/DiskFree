@@ -11,15 +11,22 @@ class VolumeViewModel: ObservableObject,
     @Published var volume: Volume
     @Published var lastSize: SizeInfo?
     @Published public var isSelected = true
-    @Published var sizes: [SizeInfo] = []
     @Published var lineColor: Color
     @Published var chartFreeLineText: String = ""
     @Published var isMostEmpty = false
     @Published var isMostFull = false
     let preferences: PreferencesViewModel
+
+    public private(set) var sizes: [SizeInfo] = []
     
     var id = UUID()
 
+    func set(sizes: [SizeInfo]) {
+        self.sizes = sizes
+
+        // update maxUsedGigs and such here
+    }
+    
     func hash(into hasher: inout Hasher) {
         hasher.combine(self.volume)
     }
@@ -52,7 +59,8 @@ class VolumeViewModel: ObservableObject,
         }
         return false            // don't want to create false positives
     }
-    
+
+    // make these published values that change when sizes do
     public var maxUsedGigs: UInt {
         var ret: UInt = 0
         for size in sizes { if size.gigsUsed > ret { ret = size.gigsUsed } }
@@ -443,7 +451,7 @@ public final class ViewModel: ObservableObject {
                     }
                     
                     volume.lastSize = newSizes.last
-                    volume.sizes = newSizes
+                    volume.set(sizes: newSizes)
                     //print("updating volume \(volume.volume.name) size to \(newSizes.count)")
                 }
             }
@@ -488,6 +496,12 @@ public final class ViewModel: ObservableObject {
             }
 
             self.objectWillChange.send() // XXX get rid of this if we can
+            /*
+             only use published varables from the view model,
+             and only use funcs in the view model to update those,
+             not from the view code directly.
+             
+             */
 
             let endTime = Date().timeIntervalSince1970
             print("view update took \(endTime-startTime) seconds")

@@ -77,10 +77,22 @@ struct VolumeActivityView: View {
     }
 
     private var volumesSortedByEmptyFirst: [Binding<VolumeViewModel>] {
-        let list: [Binding<VolumeViewModel>] = $viewModel.volumes.list.map { $volume in return $volume }
+        let list: [Binding<VolumeViewModel>] = $viewModel.volumes.list.map { $volume in
+            return $volume
+        }
 
         let ret = list.sorted { ($a: Binding<VolumeViewModel>, $b: Binding<VolumeViewModel>) in
             a.lastFreeSize() > b.lastFreeSize()
+        }
+        
+        return ret
+    }
+    
+    private var volumesSortedByLeastEmptyFirst: [Binding<VolumeViewModel>] {
+        let list: [Binding<VolumeViewModel>] = $viewModel.volumes.list.map { $volume in return $volume }
+
+        let ret = list.sorted { ($a: Binding<VolumeViewModel>, $b: Binding<VolumeViewModel>) in
+            a.lastFreeSize() < b.lastFreeSize()
         }
         
         return ret
@@ -130,7 +142,7 @@ struct VolumeActivityView: View {
         Chart {
             let lineWidth = 6
             let dotSize = 24//lineWidth*4
-            ForEach(viewModel.volumes.list) { volumeView in
+            ForEach(self.volumesSortedByEmptyFirst) { $volumeView in
                 if volumeView.isSelected {
                     if viewModel.preferences.showFreeSpace {
                         ForEach(volumeView.sizes) { sizeData in
@@ -348,7 +360,7 @@ struct SettingsView: View {
                         Text("Clear All")
                     }
                 }
-                ForEach(viewModel.volumes.list) { volumeView in
+                ForEach(self.viewModel.volumes.list) { volumeView in // XXX use a different prop than volumes
                     VolumeChoiceItemView(volumeViewModel: volumeView)
                 }
                 Spacer()
