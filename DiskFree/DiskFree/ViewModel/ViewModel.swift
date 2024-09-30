@@ -110,47 +110,6 @@ public final class ViewModel: ObservableObject {
         }
     }
 
-    // make sure the size infos aren't too old
-    private func sizeInfoListTrim(_ list: [SizeInfo]) -> [SizeInfo] {
-        // one hour before now
-        let maxOldAge = Date().timeIntervalSince1970 - 60*60 // XXX make param
-        
-        var ret: [SizeInfo] = []
-
-        for info in list {
-            if info.timestamp > maxOldAge {
-                ret.append(info)
-            }
-        }
-
-        ret.sort { $0.timestamp < $1.timestamp } // necessary?
-        
-        return ret
-    }
-    
-    private func mergeRecords(_ records1: VolumeRecords, _ records2: VolumeRecords) -> VolumeRecords {
-        var processedVolumes: Set<String> = []
-
-        var ret: VolumeRecords = [:]
-
-        for (volume, sizeInfoList1) in records1 {
-            processedVolumes.insert(volume)
-            if let sizeInfoList2 = records2[volume] {
-                // combine volumes
-                ret[volume] = sizeInfoListTrim(sizeInfoList1 + sizeInfoList2)
-            } else {
-                // no record for this volume in records2
-                ret[volume] = sizeInfoListTrim(sizeInfoList1)
-            }
-        }
-        for (volume, sizeInfoList2) in records2 {
-            if !processedVolumes.contains(volume) {
-                ret[volume] = sizeInfoListTrim(sizeInfoList2)
-            }
-        }
-        return ret
-    }
-
     private func potentialSizeWarning(for oldSize: SizeInfo?,
                                       and newSize: SizeInfo,
                                       of volume: VolumeViewModel) {
@@ -225,7 +184,7 @@ public final class ViewModel: ObservableObject {
         await MainActor.run {
             let startTime = Date().timeIntervalSince1970
             // merge them in and apply a time threshold
-            self.newVolumeSizes = mergeRecords(records, self.newVolumeSizes)
+            self.newVolumeSizes = records
 
             let recordsToSave = self.newVolumeSizes
             if shouldSave {

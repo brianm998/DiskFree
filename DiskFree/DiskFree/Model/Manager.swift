@@ -98,6 +98,20 @@ public actor Manager: Sendable {
                 }
             }
         }
+
+        // XXX do time checking here (one hour for now)
+        let maxOldAge = Date().timeIntervalSince1970 - 60*60 // XXX make param
+        
+        for (volume, sizes) in volumeSizes {
+            var newEnough: [SizeInfo] = []
+            for info in sizes {
+                if info.timestamp > maxOldAge {
+                    newEnough.append(info)
+                }
+            }
+            volumeSizes[volume] = newEnough
+        }
+        
         return volumeSizes
     }
 
