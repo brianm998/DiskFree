@@ -404,7 +404,16 @@ public final class ViewModel: ObservableObject {
      */
     
 
+    /*
 
+     move basically _all_ of this view update logic off of the main thread
+
+     the backend should already know what the view has, and update the new
+     set of records into it for it in the background, only updating up the
+     updated view models on the main actor.
+
+     
+     */
     private func viewUpdate(records: VolumeRecords, shouldSave: Bool = true) async {
         await MainActor.run {
             let startTime = Date().timeIntervalSince1970
@@ -477,7 +486,9 @@ public final class ViewModel: ObservableObject {
             if let firstSelectedViewModel {
                 firstSelectedViewModel.isMostEmpty = true
             }
-            self.objectWillChange.send()
+
+            self.objectWillChange.send() // XXX get rid of this if we can
+
             let endTime = Date().timeIntervalSince1970
             print("view update took \(endTime-startTime) seconds")
         }

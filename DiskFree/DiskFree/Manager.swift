@@ -13,13 +13,12 @@ import Foundation
  - write release scripts
  - implement version number somewhere
  - allow removing items from chart?
- - overallping annotations :(
-   - fix this by making a key (lower right) and coloring the lines
-   - add on hover popups to show name of volume and size and time?
-   - make key draggable to reposition it
-  - add loading animation at start
-  - missing visual error messages to user
-  - also do visual warning when low on space 
+ - add loading animation at start
+ - missing visual error messages to user
+ - show on chart where low space threshold is
+   - allow changing it by dragging it
+ - allow hover over tool tips for free space entries
+ - display volume tragectory (up/down/static)    
  */
 public actor Manager: Sendable {
 

@@ -173,22 +173,37 @@ struct VolumeActivityView: View {
                               .foregroundStyle(volumeView.lineColor)
                               .annotation(position: .leading, alignment: .bottom) {
                                   Text(volumeView.volume.name)
+                                    .font(.system(size: 22))
                                     .foregroundStyle(volumeView.lineColor)
+                                    .frame(maxWidth: 50)
+                                    .blinking(if: volumeView.showLowSpaceWarning,
+                                                duration: 0.4)
                               } 
                         }
                         if let sizeData = volumeView.lastSize {
-                            PointMark(
-                              x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
-		              y: .value("Gigabytes Free", sizeData.gigsFree)
-                            )
-                              .symbolSize(16)
-                              .foregroundStyle(volumeView.lineColor)
-                              .annotation(position: .trailing, alignment: .bottom) {
-                                  Text(volumeView.volume.name)
-                                    .foregroundStyle(volumeView.lineColor)
-                                    .blinking(if: volumeView.showLowSpaceWarning,
-                                              duration: 0.4)
-                              } 
+                            if volumeView.isMostFull {
+                                PointMark(
+                                  x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
+		                  y: .value("Gigabytes Free", sizeData.gigsFree)
+                                )
+                                  .symbolSize(16)
+                                  .foregroundStyle(volumeView.lineColor)
+                                  .annotation(position: .leading, alignment: .top) {
+                                      Text(volumeView.volume.name)
+                                        .font(.system(size: 22))
+                                        .foregroundStyle(volumeView.lineColor)
+                                        .blinking(if: volumeView.showLowSpaceWarning,
+                                                    duration: 0.4)
+                                  } 
+
+                            } else {
+                                PointMark(
+                                  x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
+		                  y: .value("Gigabytes Free", sizeData.gigsFree)
+                                )
+                                  .symbolSize(16)
+                                  .foregroundStyle(volumeView.lineColor)
+                            }
                         }
                     }
                     if viewModel.preferences.showUsedSpace {
