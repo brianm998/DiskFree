@@ -85,13 +85,12 @@ class VolumeViewModel: ObservableObject,
         return ret
     }
 
-    func computeChartFreeLineText() {
+    func updateChartFreeLineText() {
         if let lastSize = self.lastSize {
             chartFreeLineText = "\(lastSize.freeSizeInt)"
         } else {
             chartFreeLineText = ""
         }
-        self.objectWillChange.send()
     }
     
     var chartUsedLineText: String {

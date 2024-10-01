@@ -62,7 +62,6 @@ public final class ViewModel: ObservableObject {
                         }
                         return ret
                     }
-                    self.objectWillChange.send()
                 }
                 self.startTaskWithInterval(of: preferences.pollIntervalSeconds)
             } catch {
@@ -181,24 +180,25 @@ public final class ViewModel: ObservableObject {
      
      */
     private func viewUpdate(records: VolumeRecords, shouldSave: Bool = true) async {
-        await MainActor.run {
-            let startTime = Date().timeIntervalSince1970
-            // merge them in and apply a time threshold
-            self.newVolumeSizes = records
 
-            let recordsToSave = self.newVolumeSizes
-            if shouldSave {
-                // save them for later
-                Task {
-                    do {
-                        try await recordKeeper?.save(records: recordsToSave)
-                    } catch {
-                        print("cannot save volume records: \(error)")
-                    }
+        if shouldSave {
+            // save them for later
+            Task {
+                do {
+                    try await recordKeeper?.save(records: records)
+                } catch {
+                    print("cannot save volume records: \(error)")
                 }
             }
+        }
+        
+        await MainActor.run {
+            let startTime = Date().timeIntervalSince1970
+
+            self.newVolumeSizes = records
+
             for volume in self.volumes.list {
-                volume.computeChartFreeLineText()
+                volume.updateChartFreeLineText()
                 if let newSizes = newVolumeSizes[volume.volume.name] {
                     //print("volume.lastSize \(volume.lastSize)")
 
