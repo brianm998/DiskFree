@@ -26,11 +26,18 @@ public actor Manager: Sendable {
     private var dfActors: [Volume:ShellActor] = [:]
 
     private var volumeSizes: [String:[SizeInfo]] = [:] // keyed by volume.name
+
+    // data older than this is discarded
+    private var maxDataAgeSeconds: TimeInterval = 60*60
     
     // keep track of volume sizes
 
     let diskUtilActor = ShellActor("diskutil", arguments: ["info", "-all"])
 
+    func set(maxDataAgeSeconds: TimeInterval) {
+        self.maxDataAgeSeconds = maxDataAgeSeconds
+    }
+    
     func listVolumes() async throws -> [Volume] {
         let output = try await diskUtilActor.execute()
 //        print(output)  // printing out the full diskutil output is EXTREMELY verbose
@@ -99,8 +106,8 @@ public actor Manager: Sendable {
             }
         }
 
-        // XXX do time checking here (one hour for now)
-        let maxOldAge = Date().timeIntervalSince1970 - 60*60 // XXX make param
+        // only keep newer entries 
+        let maxOldAge = Date().timeIntervalSince1970 - maxDataAgeSeconds
         
         for (volume, sizes) in volumeSizes {
             var newEnough: [SizeInfo] = []
