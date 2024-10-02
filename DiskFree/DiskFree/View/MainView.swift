@@ -45,27 +45,3 @@ struct MainView: View {
     }
 }
 
-
-struct VolumeChoiceItemView: View {
-    @State var volumeViewModel: VolumeViewModel
-    @Environment(ViewModel.self) var viewModel
-    
-    var body: some View {
-        HStack {
-            Toggle(isOn: $volumeViewModel.isSelected) {
-                if let lastSize = volumeViewModel.lastSize {
-                    Text("\(lastSize.totalSize) \(volumeViewModel.volume.name)")
-                } else {
-                    Text("\(volumeViewModel.volume.name)")
-                }
-            }
-              .toggleStyle(.checkbox)
-              .onChange(of: volumeViewModel.isSelected) { _, value in
-                  viewModel.update(for: volumeViewModel)
-              }
-            
-        }
-    }
-}
-
-

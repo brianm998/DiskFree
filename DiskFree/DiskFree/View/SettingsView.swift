@@ -40,7 +40,8 @@ struct SettingsView: View {
                     }
                 }
                 ForEach(self.viewModel.volumes.list) { volumeView in // XXX use a different prop than volumes
-                    VolumeChoiceItemView(volumeViewModel: volumeView)
+                    VolumeChoiceItemView(viewModel: viewModel,
+                                         volumeViewModel: volumeView)
                 }
                 Spacer()
                   .frame(maxHeight: 100)
