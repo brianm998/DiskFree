@@ -120,7 +120,7 @@ public actor Manager: Sendable {
         }
 
         // only keep newer entries 
-        let maxOldAge = Date().timeIntervalSince1970 - maxDataAgeSeconds
+        let maxOldAge = Date().timeIntervalSince1970 - maxDataAgeSeconds - 60
         
         for (volume, sizes) in volumeSizes {
             var newEnough: [SizeInfo] = []
