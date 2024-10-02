@@ -9,10 +9,10 @@ public struct Preferences: Codable, Sendable {
     let showUsedSpace: Bool
     let soundVoiceOnErrors: Bool
     let errorVoice: VoiceActor.Voice
-    let legendFontSize: Int     // not hooked up
+    let legendFontSize: CGFloat
     let pollIntervalSeconds: Int
     let lowSpaceWarningThresholdGigs: UInt
-    let lowSpaceErrorThresholdGigs: UInt // not used 
+    let lowSpaceErrorThresholdGigs: UInt // not used
 }
 
 public actor PreferenceManager {

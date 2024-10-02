@@ -1,20 +1,21 @@
 import SwiftUI
 import Combine
 
-class PreferencesViewModel: ObservableObject {
+@Observable
+class PreferencesViewModel {
     // this is tracked with published variables in the volume view models
     // used here for initial values, and also shadowing the view model observables
     var volumesToShow: Set<String>
-    @Published var showSettingsView: Bool
-    @Published var showMultipleCharts: Bool
-    @Published var showFreeSpace: Bool
-    @Published var showUsedSpace: Bool
-    @Published var soundVoiceOnErrors: Bool
-    @Published var errorVoice: VoiceActor.Voice
-    @Published var legendFontSize: Int
-    @Published var pollIntervalSeconds: Int
-    @Published var lowSpaceWarningThresholdGigs: UInt
-    @Published var lowSpaceErrorThresholdGigs: UInt
+    var showSettingsView: Bool
+    var showMultipleCharts: Bool
+    var showFreeSpace: Bool
+    var showUsedSpace: Bool
+    var soundVoiceOnErrors: Bool
+    var errorVoice: VoiceActor.Voice
+    var legendFontSize: CGFloat
+    var pollIntervalSeconds: Int
+    var lowSpaceWarningThresholdGigs: UInt
+    var lowSpaceErrorThresholdGigs: UInt
 
     init() {
         self.volumesToShow = []

@@ -12,7 +12,7 @@ public final class ViewModel: ObservableObject {
     @Published var preferences = PreferencesViewModel()
     @Published var lowVolumes: Set<String> = []
     @Published var volumeRecordsTimeDurationSeconds: TimeInterval = 0
-    
+
     private var cancellables: Set<AnyCancellable> = []
     
     init() {
@@ -36,6 +36,18 @@ public final class ViewModel: ObservableObject {
     
     var newVolumeSizes: VolumeRecords = [:]
 
+    func decreaseFontSize() {
+        if preferences.legendFontSize > 4 { // XXX hardcoded minimum
+            preferences.legendFontSize -= 1
+        }
+        savePreferences()
+    }
+
+    func increaseFontSize() {
+        preferences.legendFontSize += 1
+        savePreferences()
+    }
+    
     func listVolumes() {
         Task {
             do {
@@ -301,7 +313,10 @@ public final class ViewModel: ObservableObject {
                 self.preferences.volumesToShow.remove(volumeViewModel.volume.name)
             }
         }
+        savePreferences()
+    }
 
+    func savePreferences() {
         let prefsToSave = self.preferences.preferencesToSave
         Task {
             do {

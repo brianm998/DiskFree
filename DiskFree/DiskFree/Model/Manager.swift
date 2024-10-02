@@ -33,7 +33,7 @@ public actor Manager: Sendable {
                 let initialSizes = try await recordKeeper.loadRecords()
 
                 volumeSizes = initialSizes
-                print("loaded stored records \(initialSizes.count ?? -1)")
+                print("loaded stored records \(initialSizes.count)")
             } 
         } catch {
             print("error loading stored records: \(error)")

@@ -68,33 +68,52 @@ struct ChartViews: View {
     var legendForCombinedChart: some View {
         Group {
             if volumesSortedByEmptyFirst.count > 0 {
-                VStack(alignment: .leading) {
-                    Text("Free Space")
-                      .font(.system(size: 36))
-                    Grid(alignment: .leading) {
-                        ForEach(volumesSortedByEmptyFirst) { $volumeView in
-                            if volumeView.isSelected {
-                                GridRow {
-                                    Text(volumeView.volume.name)
-                                      .font(.system(size: 36))
-                                      .foregroundStyle(volumeView.lineColor)
-//                                      .foregroundStyle(.white)
-//                                      .padding(2)
-//          .background(volumeView.lineColor)
+                    VStack(alignment: .leading) {
+                        Text("Free Space")
+                          .font(.system(size: viewModel.preferences.legendFontSize))
+                        Grid(alignment: .leading) {
+                            ForEach(volumesSortedByEmptyFirst) { $volumeView in
+                                if volumeView.isSelected {
+                                    GridRow {
+                                        Text(volumeView.volume.name)
+                                          .font(.system(size: viewModel.preferences.legendFontSize))
+                                          .foregroundStyle(volumeView.lineColor)
+                                        //                                      .foregroundStyle(.white)
+                                        //                                      .padding(2)
+                                        //          .background(volumeView.lineColor)
                                         Text(volumeView.chartFreeLineText)
-                                          .font(.system(size: 36))
+                                          .font(.system(size: viewModel.preferences.legendFontSize))
                                           .foregroundStyle(volumeView.showLowSpaceWarning ? .red : volumeView.lineColor)
                                           .blinking(if: volumeView.showLowSpaceWarning,
                                                       duration: 0.4)
-    
-                   // never ends :(                .animation(Animation.easeInOut(duration:0.4).repeatForever(autoreverses:true))
-                                    
+                                        
+                                        // never ends :(                .animation(Animation.easeInOut(duration:0.4).repeatForever(autoreverses:true))
+                                        
+                                    }
                                 }
                             }
                         }
+                        Spacer()
                     }
-                    //        .frame(width: 50, height: 100)
-                }
+                      .frame(maxHeight: .infinity)
+                      .overlay(
+                        HStack {
+                            Button(action: { viewModel.decreaseFontSize() }) {
+                                Image(systemName: "minus.square")
+                                  .resizable()
+                                  .frame(width: 20, height: 20)
+                            }
+                              .buttonStyle(BorderlessButtonStyle())
+                            Button(action: { viewModel.increaseFontSize() }) {
+                                Image(systemName: "plus.square")
+                                  .resizable()
+                                  .frame(width: 20, height: 20)
+                            }
+                              .buttonStyle(BorderlessButtonStyle())
+                        },
+                        alignment: .bottomTrailing)
+                    
+
             }
         }
     }
