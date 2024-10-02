@@ -16,16 +16,10 @@ class VolumeViewModel: Identifiable,
     
     let preferences: PreferencesViewModel
 
-    public private(set) var sizes: [SizeInfo] = []
+    public var sizes: [SizeInfo] = []
     
     var id = UUID()
 
-    func set(sizes: [SizeInfo]) {
-        self.sizes = sizes
-
-        // update maxUsedGigs and such here
-    }
-    
     func hash(into hasher: inout Hasher) {
         hasher.combine(self.volume)
     }

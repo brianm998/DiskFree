@@ -39,7 +39,7 @@ struct SettingsView: View {
                         Text("Clear All")
                     }
                 }
-                ForEach(self.viewModel.volumes.list) { volumeView in // XXX use a different prop than volumes
+                ForEach(self.viewModel.volumes) { volumeView in
                     VolumeChoiceItemView(viewModel: viewModel,
                                          volumeViewModel: volumeView)
                 }

@@ -19,7 +19,7 @@ struct MainView: View {
                       if viewModel.volumeRecordsTimeDurationSeconds < 60 {
                           let durationString = String(format: "%d", Int(viewModel.volumeRecordsTimeDurationSeconds))
                           Text("The last \(durationString) seconds of free space")
-                      } else if viewModel.volumeRecordsTimeDurationSeconds < 60*60 {
+                      } else {
                           let durationString = String(format: "%d", Int(viewModel.volumeRecordsTimeDurationSeconds/60))
                           Text("The last \(durationString) minutes of free space")
                       }

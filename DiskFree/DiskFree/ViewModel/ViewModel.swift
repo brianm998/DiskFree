@@ -1,14 +1,17 @@
 import SwiftUI
 import Combine
 
-
-@Observable class VolumeListViewModel {
-    var list: [VolumeViewModel] = []
-}
-
 @MainActor @Observable
 public final class ViewModel {
-    var volumes = VolumeListViewModel()
+
+    /*
+     property wrappers used with @Observable:
+     
+     @Bindable
+     @State
+     @Environment
+     */
+    var volumes: [VolumeViewModel] = []
     var preferences = PreferencesViewModel()
     var lowVolumes: Set<String> = []
     var volumeRecordsTimeDurationSeconds: TimeInterval = 0
@@ -51,15 +54,12 @@ public final class ViewModel {
     func listVolumes() {
         Task {
             do {
-                //say("we are now loading stored records", as: .Bad)
                 await self.manager.loadStoredVolumeRecords()
-                //say("we are now loading volumes")
                 let volumes = try await manager.listVolumes()
 
-                //say("we are now done loading volumes")
                 await MainActor.run {
                     var colorIndex = 0
-                    self.volumes.list = volumes.map {
+                    self.volumes = volumes.map {
                         let ret = VolumeViewModel(volume: $0,
                                                   color: lineColors[colorIndex],
                                                   preferences: preferences)
@@ -85,8 +85,8 @@ public final class ViewModel {
 
     public func minGigs(showFree: Bool, showUsed: Bool) -> UInt {
         var ret = UInt.max<<8
-        if volumes.list.count == 0 { return 0 }
-        for volumeViewModel in volumes.list {
+        if volumes.count == 0 { return 0 }
+        for volumeViewModel in volumes {
             if volumeViewModel.isSelected {
                 let maxGigs = volumeViewModel.minGigs(showFree: showFree, showUsed: showUsed)
                 if maxGigs < ret { ret = maxGigs }
@@ -97,8 +97,8 @@ public final class ViewModel {
 
     public func maxGigs(showFree: Bool, showUsed: Bool) -> UInt {
         var ret: UInt = 0
-        if volumes.list.count == 0 { return UInt.max<<8 }
-        for volumeViewModel in volumes.list {
+        if volumes.count == 0 { return UInt.max<<8 }
+        for volumeViewModel in volumes {
             if volumeViewModel.isSelected {
                 let maxGigs = volumeViewModel.maxGigs(showFree: showFree, showUsed: showUsed)
                 if maxGigs > ret { ret = maxGigs }
@@ -109,13 +109,13 @@ public final class ViewModel {
     }
     
     func clearAll() {
-        for volumeViewModel in volumes.list {
+        for volumeViewModel in volumes {
             volumeViewModel.isSelected = false
         }
     }
 
     func selectAll() {
-        for volumeViewModel in volumes.list {
+        for volumeViewModel in volumes {
             volumeViewModel.isSelected = true
         }
     }
@@ -204,8 +204,10 @@ public final class ViewModel {
         }
 
         // compute the time duration of records we have 
-        let duration = timeDurationSeconds(of: records)
+        let duration = Date().timeIntervalSince1970 - oldestTime(from: records)
 
+        print("FUCKING duration \(duration)")
+        
         await MainActor.run {
             let startTime = Date().timeIntervalSince1970
 
@@ -213,7 +215,7 @@ public final class ViewModel {
 
             self.volumeRecordsTimeDurationSeconds = duration
             
-            for volume in self.volumes.list {
+            for volume in self.volumes {
                 volume.updateChartFreeLineText()
                 if let newSizes = newVolumeSizes[volume.volume.name] {
                     //print("volume.lastSize \(volume.lastSize)")
@@ -225,17 +227,17 @@ public final class ViewModel {
                     }
                     
                     volume.lastSize = newSizes.last
-                    volume.set(sizes: newSizes)
+                    volume.sizes = newSizes
                     //print("updating volume \(volume.volume.name) size to \(newSizes.count)")
                 }
             }
-            self.volumes.list.sort {
+            self.volumes.sort {
                 $0.lastSize?.totalSize_k ?? 0 > $1.lastSize?.totalSize_k ?? 0
             }
 
             // apply colors here
 
-            let volumesEmptyFirst = self.volumes.list.sorted {
+            let volumesEmptyFirst = self.volumes.sorted {
                 $0.lastFreeSize() > $1.lastFreeSize()
             }
             
@@ -303,7 +305,6 @@ public final class ViewModel {
         }
     }
 
-    // XXX call this for top bar toggles too (not just volume selection toggles)
     func update(for volumeViewModel: VolumeViewModel? = nil) { 
         if let volumeViewModel {
             if volumeViewModel.isSelected {

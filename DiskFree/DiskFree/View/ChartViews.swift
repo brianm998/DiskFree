@@ -44,7 +44,7 @@ struct ChartViews: View {
     }
 
     private var volumesSortedByEmptyFirst: [VolumeViewModel] {
-        let list: [VolumeViewModel] = viewModel.volumes.list
+        let list: [VolumeViewModel] = viewModel.volumes
 
         let ret = list.sorted { (a: VolumeViewModel, b: VolumeViewModel) in
             a.lastFreeSize() > b.lastFreeSize()
@@ -55,7 +55,7 @@ struct ChartViews: View {
     
     var legendForCombinedChart: some View {
         Group {
-            if viewModel.volumes.list.count > 0 {
+            if viewModel.volumes.count > 0 {
                 VStack(alignment: .leading) {
                     Text("Free Space")
                       .font(.system(size: viewModel.preferences.legendFontSize))
@@ -114,7 +114,7 @@ struct ChartViews: View {
         Chart {
             let lineWidth = 6
             let dotSize = 24//lineWidth*4
-            ForEach(self.volumesSortedByEmptyFirst) { volumeView in
+          ForEach(self.viewModel.volumes) { volumeView in
                 if volumeView.isSelected {
                     if viewModel.preferences.showFreeSpace {
                         ForEach(volumeView.sizes) { sizeData in
