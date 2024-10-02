@@ -1,18 +1,19 @@
 import SwiftUI
 import Combine
 
-class VolumeViewModel: ObservableObject,
-                       Identifiable,
+@Observable
+class VolumeViewModel: Identifiable,
                        Hashable,
                        CustomStringConvertible
 {
-    @Published var volume: Volume
-    @Published var lastSize: SizeInfo?
-    @Published public var isSelected = true
-    @Published var lineColor: Color
-    @Published var chartFreeLineText: String = ""
-    @Published var isMostEmpty = false
-    @Published var isMostFull = false
+    var volume: Volume
+    var lastSize: SizeInfo?
+    public var isSelected = true
+    var lineColor: Color
+    var chartFreeLineText: String = ""
+    var isMostEmpty = false
+    var isMostFull = false
+    
     let preferences: PreferencesViewModel
 
     public private(set) var sizes: [SizeInfo] = []

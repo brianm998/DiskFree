@@ -1,14 +1,15 @@
 import SwiftUI
 
 struct MainView: View {
-    @EnvironmentObject var viewModel: ViewModel
 
+    @State var viewModel: ViewModel
+    
     var body: some View {
         VStack {
             HStack {
-                ChartViews()
+              ChartViews(viewModel: viewModel)
                 if viewModel.preferences.showSettingsView {
-                    SettingsView()
+                  SettingsView(viewModel: viewModel)
                 }
             }
         }
@@ -24,7 +25,6 @@ struct MainView: View {
                       }
                   }
               }
-
               ToolbarItem(placement: .primaryAction) {
                   Toggle(isOn: $viewModel.preferences.showSettingsView) {
                       if viewModel.preferences.showSettingsView {
@@ -35,7 +35,6 @@ struct MainView: View {
                   }
                   .onChange(of: viewModel.preferences.showSettingsView) { _, value in
                       viewModel.update()
-                      viewModel.objectWillChange.send()
                   }
               }
           }
@@ -48,8 +47,8 @@ struct MainView: View {
 
 
 struct VolumeChoiceItemView: View {
-    @ObservedObject var volumeViewModel: VolumeViewModel
-    @EnvironmentObject var viewModel: ViewModel
+    @State var volumeViewModel: VolumeViewModel
+    @Environment(ViewModel.self) var viewModel
     
     var body: some View {
         HStack {
@@ -63,7 +62,6 @@ struct VolumeChoiceItemView: View {
               .toggleStyle(.checkbox)
               .onChange(of: volumeViewModel.isSelected) { _, value in
                   viewModel.update(for: volumeViewModel)
-                  viewModel.objectWillChange.send()
               }
             
         }

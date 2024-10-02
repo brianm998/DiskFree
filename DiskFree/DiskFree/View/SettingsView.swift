@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @EnvironmentObject var viewModel: ViewModel
+    @State var viewModel: ViewModel
     
     var body: some View {
         ScrollView {

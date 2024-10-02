@@ -3,7 +3,7 @@ import Charts
 
 // split this up
 struct ChartViews: View {
-    @EnvironmentObject var viewModel: ViewModel
+    @State var viewModel: ViewModel
 
     var redGradientColor: LinearGradient {
         LinearGradient(gradient: Gradient(colors: [Color.red.opacity(0.8),
@@ -43,23 +43,11 @@ struct ChartViews: View {
         }
     }
 
-    private var volumesSortedByEmptyFirst: [Binding<VolumeViewModel>] {
-        let list: [Binding<VolumeViewModel>] = $viewModel.volumes.list.map { $volume in
-            return $volume
-        }
+    private var volumesSortedByEmptyFirst: [VolumeViewModel] {
+        let list: [VolumeViewModel] = viewModel.volumes.list
 
-        let ret = list.sorted { ($a: Binding<VolumeViewModel>, $b: Binding<VolumeViewModel>) in
+        let ret = list.sorted { (a: VolumeViewModel, b: VolumeViewModel) in
             a.lastFreeSize() > b.lastFreeSize()
-        }
-        
-        return ret
-    }
-    
-    private var volumesSortedByLeastEmptyFirst: [Binding<VolumeViewModel>] {
-        let list: [Binding<VolumeViewModel>] = $viewModel.volumes.list.map { $volume in return $volume }
-
-        let ret = list.sorted { ($a: Binding<VolumeViewModel>, $b: Binding<VolumeViewModel>) in
-            a.lastFreeSize() < b.lastFreeSize()
         }
         
         return ret
@@ -67,12 +55,12 @@ struct ChartViews: View {
     
     var legendForCombinedChart: some View {
         Group {
-            if volumesSortedByEmptyFirst.count > 0 {
+            if viewModel.volumes.list.count > 0 {
                     VStack(alignment: .leading) {
                         Text("Free Space")
                           .font(.system(size: viewModel.preferences.legendFontSize))
                         Grid(alignment: .leading) {
-                            ForEach(volumesSortedByEmptyFirst) { $volumeView in
+                            ForEach($viewModel.volumes.list) { $volumeView in
                                 if volumeView.isSelected {
                                     GridRow {
                                         Text(volumeView.volume.name)
@@ -128,7 +116,7 @@ struct ChartViews: View {
         Chart {
             let lineWidth = 6
             let dotSize = 24//lineWidth*4
-            ForEach(self.volumesSortedByEmptyFirst) { $volumeView in
+            ForEach(self.volumesSortedByEmptyFirst) { volumeView in
                 if volumeView.isSelected {
                     if viewModel.preferences.showFreeSpace {
                         ForEach(volumeView.sizes) { sizeData in
@@ -260,7 +248,7 @@ struct ChartViews: View {
     
     var multiCharts: some View {
         VStack {
-            ForEach(volumesSortedByEmptyFirst) { $volumeView in
+            ForEach(volumesSortedByEmptyFirst) { volumeView in
                 if volumeView.isSelected {
                     HStack {
                         Chart(volumeView.sizes) { sizeData in

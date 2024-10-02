@@ -2,16 +2,16 @@ import SwiftUI
 import Combine
 
 
-class VolumeListViewModel: ObservableObject {
-    @Published var list: [VolumeViewModel] = [] // XXX make this Binding<VolumeViewModel>?
+@Observable class VolumeListViewModel {
+    var list: [VolumeViewModel] = []
 }
 
-@MainActor
-public final class ViewModel: ObservableObject {
-    @Published var volumes = VolumeListViewModel()
-    @Published var preferences = PreferencesViewModel()
-    @Published var lowVolumes: Set<String> = []
-    @Published var volumeRecordsTimeDurationSeconds: TimeInterval = 0
+@MainActor @Observable
+public final class ViewModel {
+    var volumes = VolumeListViewModel()
+    var preferences = PreferencesViewModel()
+    var lowVolumes: Set<String> = []
+    var volumeRecordsTimeDurationSeconds: TimeInterval = 0
 
     private var cancellables: Set<AnyCancellable> = []
     
@@ -269,7 +269,6 @@ public final class ViewModel: ObservableObject {
                 firstSelectedViewModel.isMostEmpty = true
             }
 
-            self.objectWillChange.send() // XXX get rid of this if we can
             /*
              only use published varables from the view model,
              and only use funcs in the view model to update those,
