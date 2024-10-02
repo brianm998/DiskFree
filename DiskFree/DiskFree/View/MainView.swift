@@ -13,6 +13,18 @@ struct MainView: View {
             }
         }
           .toolbar {
+              if viewModel.volumeRecordsTimeDurationSeconds != 0 {
+                  ToolbarItem(placement: .principal) {
+                      if viewModel.volumeRecordsTimeDurationSeconds < 60 {
+                          let durationString = String(format: "%d", Int(viewModel.volumeRecordsTimeDurationSeconds))
+                          Text("The last \(durationString) seconds of free space")
+                      } else if viewModel.volumeRecordsTimeDurationSeconds < 60*60 {
+                          let durationString = String(format: "%d", Int(viewModel.volumeRecordsTimeDurationSeconds/60))
+                          Text("The last \(durationString) minutes of free space")
+                      }
+                  }
+              }
+
               ToolbarItem(placement: .primaryAction) {
                   Toggle(isOn: $viewModel.preferences.showSettingsView) {
                       if viewModel.preferences.showSettingsView {

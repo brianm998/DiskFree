@@ -11,6 +11,7 @@ public final class ViewModel: ObservableObject {
     @Published var volumes = VolumeListViewModel()
     @Published var preferences = PreferencesViewModel()
     @Published var lowVolumes: Set<String> = []
+    @Published var volumeRecordsTimeDurationSeconds: TimeInterval = 0
     
     private var cancellables: Set<AnyCancellable> = []
     
@@ -33,15 +34,13 @@ public final class ViewModel: ObservableObject {
     let recordKeeper = VolumeRecordKeeper()
     let preferenceManager = PreferenceManager()
     
-    let seconds = 8            // XXX make this a published variable
-
     var newVolumeSizes: VolumeRecords = [:]
 
     func listVolumes() {
         Task {
             do {
                 //say("we are now loading stored records", as: .Bad)
-                await self.loadStoredRecords()
+                await self.manager.loadStoredVolumeRecords()
                 //say("we are now loading volumes")
                 let volumes = try await manager.listVolumes()
 
@@ -191,12 +190,17 @@ public final class ViewModel: ObservableObject {
                 }
             }
         }
-        
+
+        // compute the time duration of records we have 
+        let duration = timeDurationSeconds(of: records)
+
         await MainActor.run {
             let startTime = Date().timeIntervalSince1970
 
             self.newVolumeSizes = records
 
+            self.volumeRecordsTimeDurationSeconds = duration
+            
             for volume in self.volumes.list {
                 volume.updateChartFreeLineText()
                 if let newSizes = newVolumeSizes[volume.volume.name] {
@@ -265,23 +269,7 @@ public final class ViewModel: ObservableObject {
             print("view update took \(endTime-startTime) seconds")
         }
     }
-    
-    private func loadStoredRecords() async {
-        // on startup, first load any stored records
-        var storedRecords: VolumeRecords?
-        do {
-            storedRecords = try await recordKeeper?.loadRecords() 
-//            print("loaded stored records \(storedRecords?.count)")
-        } catch {
-            print("error loading stored records: \(error)")
-        }
 
-        if let storedRecords {
-            // update the view with any stored records
-            await self.viewUpdate(records: storedRecords, shouldSave: false)
-        }
-    }
-    
     private func startTaskWithInterval(of seconds: Int) {
         self.task = Task {
             var isFirst = true

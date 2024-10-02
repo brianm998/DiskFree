@@ -25,8 +25,21 @@ public actor Manager: Sendable {
     private var volumes: [Volume] = []
     private var dfActors: [Volume:ShellActor] = [:]
 
-    private var volumeSizes: [String:[SizeInfo]] = [:] // keyed by volume.name
+    private var volumeSizes: VolumeRecords = [:] // keyed by volume.name
 
+    public func loadStoredVolumeRecords() async {
+        do {
+            if let recordKeeper = VolumeRecordKeeper() {
+                let initialSizes = try await recordKeeper.loadRecords()
+
+                volumeSizes = initialSizes
+                print("loaded stored records \(initialSizes.count ?? -1)")
+            } 
+        } catch {
+            print("error loading stored records: \(error)")
+        }
+    }
+    
     // data older than this is discarded
     private var maxDataAgeSeconds: TimeInterval = 60*60
     
@@ -85,7 +98,7 @@ public actor Manager: Sendable {
         return ret
     }
 
-    func recordVolumeSizes() async throws -> [String:[SizeInfo]] {
+    func recordVolumeSizes() async throws -> VolumeRecords {
         //print("record volume sizes volumes.count \(volumes.count)")
         // use the same timestamp for all of them,
         // instead of having them be very slightly different
