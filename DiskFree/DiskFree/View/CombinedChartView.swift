@@ -196,10 +196,9 @@ struct CombinedChartView: View {
           .chartXAxis {
               AxisMarks(preset: .aligned) // XXX doesn't help :(
           }
-          .chartYScale(domain: viewModel.minGigs(showFree: viewModel.preferences.showFreeSpace,
-                                                 showUsed: viewModel.preferences.showUsedSpace)...viewModel.maxGigs(showFree: viewModel.preferences.showFreeSpace,
-                                                                                                                     showUsed: viewModel.preferences.showUsedSpace)+20)
 
+          .chartYScale(domain: viewModel.chartRange(showFree: viewModel.preferences.showFreeSpace,
+                                                    showUsed: viewModel.preferences.showUsedSpace))
           .chartYAxisLabel("Gigabytes")
     }
 }

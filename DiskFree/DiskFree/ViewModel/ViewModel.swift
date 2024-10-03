@@ -90,7 +90,19 @@ public final class ViewModel {
 
     private var task: Task<Void,Never>?
 
-    public func minGigs(showFree: Bool, showUsed: Bool) -> UInt {
+    public func chartRange(showFree: Bool, showUsed: Bool) -> ClosedRange<UInt> {
+
+        let min = minGigs(showFree: showFree, showUsed: showUsed)
+        let max = maxGigs(showFree: showFree, showUsed: showUsed) + 20
+
+        if min<max {
+            return min...max
+        } else {
+            return 0...max
+        }
+    }
+    
+    private func minGigs(showFree: Bool, showUsed: Bool) -> UInt {
         var ret = UInt.max<<8
         if volumes.count == 0 {
             return 0
@@ -104,7 +116,7 @@ public final class ViewModel {
         return ret
     }
 
-    public func maxGigs(showFree: Bool, showUsed: Bool) -> UInt {
+    private func maxGigs(showFree: Bool, showUsed: Bool) -> UInt {
         var ret: UInt = 0
         if volumes.count == 0 {
             return UInt.max<<8

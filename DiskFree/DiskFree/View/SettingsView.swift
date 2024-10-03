@@ -25,12 +25,16 @@ struct SettingsView: View {
                   viewModel.update()
               }
 
-            Toggle(isOn: $viewModel.preferences.showMultipleCharts) {
-                Text("show multiple charts")
+            Picker("Chart Type", selection: $viewModel.preferences.chartType) {
+                ForEach(ChartType.allCases) { type in
+                    Text(type.description)
+                }
             }
-              .onChange(of: viewModel.preferences.showMultipleCharts) { _, value in
+              .onChange(of: viewModel.preferences.chartType) { _, value in
                   viewModel.update()
               }
+
+            
             HStack {
                 Text("Check Every")
                 TextField("\(viewModel.preferences.pollIntervalSeconds)",

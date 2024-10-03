@@ -7,7 +7,7 @@ class PreferencesViewModel {
     // used here for initial values, and also shadowing the view model observables
     var volumesToShow: Set<String>
     var showSettingsView: Bool
-    var showMultipleCharts: Bool
+    var chartType: ChartType
     var showFreeSpace: Bool
     var showUsedSpace: Bool
     var soundVoiceOnWarnings: Bool
@@ -22,7 +22,7 @@ class PreferencesViewModel {
     init() {
         self.volumesToShow = []
         self.showSettingsView = false
-        self.showMultipleCharts = false
+        self.chartType = .combined
         self.showFreeSpace = true
         self.showUsedSpace = false
         self.soundVoiceOnWarnings = true
@@ -38,7 +38,7 @@ class PreferencesViewModel {
     init(preferences: Preferences) {
         self.volumesToShow = Set(preferences.volumesToShow)
         self.showSettingsView = preferences.showSettingsView
-        self.showMultipleCharts = preferences.showMultipleCharts
+        self.chartType = preferences.chartType
         self.showFreeSpace = preferences.showFreeSpace
         self.showUsedSpace = preferences.showUsedSpace
         self.warningVoice = preferences.warningVoice
@@ -54,7 +54,7 @@ class PreferencesViewModel {
     var preferencesToSave: Preferences {
         Preferences(volumesToShow: Array(volumesToShow),
                     showSettingsView: self.showSettingsView,
-                    showMultipleCharts: self.showMultipleCharts,
+                    chartType: self.chartType,
                     showFreeSpace: self.showFreeSpace,
                     showUsedSpace: self.showUsedSpace,
                     soundVoiceOnWarnings: self.soundVoiceOnWarnings,

@@ -4,7 +4,7 @@ import Foundation
 public struct Preferences: Codable, Sendable {
     let volumesToShow: [String]
     let showSettingsView: Bool
-    let showMultipleCharts: Bool
+    let chartType: ChartType
     let showFreeSpace: Bool
     let showUsedSpace: Bool
     let soundVoiceOnWarnings: Bool
