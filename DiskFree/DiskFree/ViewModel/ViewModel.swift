@@ -63,7 +63,9 @@ public final class ViewModel {
             do {
                 await self.manager.loadStoredVolumeRecords()
                 let volumes = try await manager.listVolumes()
-
+                if preferences.volumesToShow.count == 0 {
+                    preferences.volumesToShow = Set(volumes.map { $0.name })
+                }
                 await MainActor.run {
                     var colorIndex = 0
                     self.volumes = volumes.map {
