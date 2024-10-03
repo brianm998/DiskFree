@@ -35,7 +35,7 @@ public actor VoiceActor {
                                         arguments: ["-v",
                                                     nextVoice.rawValue,
                                                     "'\(nextMessage)'"])
-            try await shellActor.execute()
+            _ = try await shellActor.execute()
         }
         
         self.isTalkingNow = false

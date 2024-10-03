@@ -13,7 +13,8 @@ public final class ViewModel {
      */
     var volumes: [VolumeViewModel] = []
     var preferences = PreferencesViewModel()
-    var lowVolumes: Set<String> = []
+    var warningVolumes: Set<String> = []
+    var errorVolumes: Set<String> = []
     var volumeRecordsTimeDurationSeconds: TimeInterval = 0
 
     private var cancellables: Set<AnyCancellable> = []
@@ -74,7 +75,7 @@ public final class ViewModel {
                         return ret
                     }
                 }
-                self.startTaskWithInterval(of: preferences.pollIntervalSeconds)
+                self.startTask()
             } catch {
                 print("ERROR: \(error)")
             }
@@ -85,7 +86,9 @@ public final class ViewModel {
 
     public func minGigs(showFree: Bool, showUsed: Bool) -> UInt {
         var ret = UInt.max<<8
-        if volumes.count == 0 { return 0 }
+        if volumes.count == 0 {
+            return 0
+        }
         for volumeViewModel in volumes {
             if volumeViewModel.isSelected {
                 let maxGigs = volumeViewModel.minGigs(showFree: showFree, showUsed: showUsed)
@@ -97,14 +100,15 @@ public final class ViewModel {
 
     public func maxGigs(showFree: Bool, showUsed: Bool) -> UInt {
         var ret: UInt = 0
-        if volumes.count == 0 { return UInt.max<<8 }
+        if volumes.count == 0 {
+            return UInt.max<<8
+        }
         for volumeViewModel in volumes {
             if volumeViewModel.isSelected {
                 let maxGigs = volumeViewModel.maxGigs(showFree: showFree, showUsed: showUsed)
                 if maxGigs > ret { ret = maxGigs }
             }
         }
-
         return ret
     }
     
@@ -120,37 +124,48 @@ public final class ViewModel {
         }
     }
 
-    private func potentialSizeWarning(for oldSize: SizeInfo?,
-                                      and newSize: SizeInfo,
-                                      of volume: VolumeViewModel) {
-        if !preferences.soundVoiceOnErrors         { return }
-        if !volume.isSelected                      { return }
+    private func potentialSizeAudio(for oldSize: SizeInfo?,
+                                    and newSize: SizeInfo,
+                                    of volume: VolumeViewModel,
+                                    warningThreshold: UInt,
+                                    badText: String,
+                                    goodText: String,
+                                    lowVolumes: inout Set<String>,
+                                    with voice: VoiceActor.Voice)
+    {
+        if !volume.isSelected { return }
 
         // compare and see if we've crossed this threshold
-        let warningThreshold = preferences.lowSpaceWarningThresholdGigs
 
         if lowVolumes.contains(volume.volume.name) { 
             if newSize.gigsFree > warningThreshold {
                 lowVolumes.remove(volume.volume.name)
-                say("\(volume.volume.name) is no longer low on free space.  It now has \(newSize.gigsFree) gigabytes of free space left.")
+
+                let message = goodText
+                  .replacingOccurrences(of: "$0", with: volume.volume.name)
+                  .replacingOccurrences(of: "$1", with: "\(newSize.gigsFree)")
+
+                say(message, as: voice)
             }
             return
         }
-        
-        let message = "Low Disk Space Warning.  \(volume.volume.name) is running low on free space.  It now has only \(newSize.gigsFree) gigabytes of free space left."
-        
+
+        let message = badText
+          .replacingOccurrences(of: "$0", with: volume.volume.name)
+          .replacingOccurrences(of: "$1", with: "\(newSize.gigsFree)")
+
         if let oldSize,
            oldSize.gigsFree >= warningThreshold,
            newSize.gigsFree < warningThreshold
         {
-            say(message, as: preferences.errorVoice)
+            say(message, as: voice)
             print("WARNING: \(volume.volume.name) oldSize.gigsFree \(oldSize.gigsFree) newSize.gigsFree \(newSize.gigsFree)")
             lowVolumes.insert(volume.volume.name)
         } else if newSize.gigsFree < warningThreshold {
             // no old size
             print("WARNING: \(volume.volume.name) newSize.gigsFree \(newSize.gigsFree)")
             
-            say(message, as: preferences.errorVoice)
+            say(message, as: voice)
             lowVolumes.insert(volume.volume.name)
         } else {
             // put out some kind of other error if it gets empty or really close to so
@@ -179,17 +194,6 @@ public final class ViewModel {
 
      */
     
-
-    /*
-
-     move basically _all_ of this view update logic off of the main thread
-
-     the backend should already know what the view has, and update the new
-     set of records into it for it in the background, only updating up the
-     updated view models on the main actor.
-
-     
-     */
     private func viewUpdate(records: VolumeRecords, shouldSave: Bool = true) async {
 
         if shouldSave {
@@ -206,8 +210,6 @@ public final class ViewModel {
         // compute the time duration of records we have 
         let duration = Date().timeIntervalSince1970 - oldestTime(from: records)
 
-        print("FUCKING duration \(duration)")
-        
         await MainActor.run {
             let startTime = Date().timeIntervalSince1970
 
@@ -220,14 +222,39 @@ public final class ViewModel {
                 if let newSizes = newVolumeSizes[volume.volume.name] {
                     //print("volume.lastSize \(volume.lastSize)")
 
-                    if let oldSize = volume.lastSize,
-                       let newSize = newSizes.last
+                    let oldSize = volume.lastSize
+                    let newSize = newSizes.last
+                    
+                    volume.lastSize = newSize
+                    volume.sizes = newSizes
+
+                    if let oldSize,
+                       let newSize
                     {
-                        potentialSizeWarning(for: oldSize, and: newSize, of: volume)
+                        if preferences.soundVoiceOnErrors { 
+                            potentialSizeAudio(for: oldSize,
+                                               and: newSize,
+                                               of: volume,
+                                               warningThreshold: preferences.lowSpaceErrorThresholdGigs,
+                                               badText: "Low Disk Space Error.  $0 is running EXTREMELY low on free space.  It now has only $1 gigabytes of free space left.",
+
+                                               goodText: "$0 is no longer extremely low on free space.  It now has $1 gigabytes of free space left.",
+                                               lowVolumes: &errorVolumes,
+                                               with: preferences.errorVoice)
+                        }
+                        if preferences.soundVoiceOnWarnings { 
+                            potentialSizeAudio(for: oldSize,
+                                               and: newSize,
+                                               of: volume,
+                                               warningThreshold: preferences.lowSpaceWarningThresholdGigs,
+                                               badText: "Low Disk Space Warning.  $0 is running low on free space.  It now has only $1 gigabytes of free space left.",
+
+                                               goodText: "$0 is no longer low on free space.  It now has $1 gigabytes of free space left.",
+                                               lowVolumes: &warningVolumes,
+                                               with: preferences.warningVoice)
+                        }
                     }
                     
-                    volume.lastSize = newSizes.last
-                    volume.sizes = newSizes
                     //print("updating volume \(volume.volume.name) size to \(newSizes.count)")
                 }
             }
@@ -244,7 +271,7 @@ public final class ViewModel {
             var colorIndex = 0
             var lastSelectedViewModel: VolumeViewModel? = nil
             var firstSelectedViewModel: VolumeViewModel? = nil
-            for var volumeViewModel in volumesEmptyFirst {
+            for volumeViewModel in volumesEmptyFirst {
                 volumeViewModel.isMostFull = false
                 volumeViewModel.isMostEmpty = false
                 if volumeViewModel.isSelected {
@@ -271,19 +298,12 @@ public final class ViewModel {
                 firstSelectedViewModel.isMostEmpty = true
             }
 
-            /*
-             only use published varables from the view model,
-             and only use funcs in the view model to update those,
-             not from the view code directly.
-             
-             */
-
             let endTime = Date().timeIntervalSince1970
             print("view update took \(endTime-startTime) seconds")
         }
     }
 
-    private func startTaskWithInterval(of seconds: Int) {
+    private func startTask() {
         self.task = Task {
             var isFirst = true
             // then iterate until we are cancelled
@@ -293,6 +313,8 @@ public final class ViewModel {
 
                     try Task.checkCancellation()
                     if !isFirst {
+                        let seconds = await MainActor.run { preferences.pollIntervalSeconds }
+                        
                         // don't sleep the first time so the graph updates quicker
                         try await Task.sleep(nanoseconds: UInt64(seconds*1_000_000_000))
                     }

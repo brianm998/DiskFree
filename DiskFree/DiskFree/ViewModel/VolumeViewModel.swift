@@ -1,6 +1,8 @@
 import SwiftUI
 import Combine
 
+
+
 @Observable
 class VolumeViewModel: Identifiable,
                        Hashable,
@@ -11,11 +13,18 @@ class VolumeViewModel: Identifiable,
     public var isSelected = true
     var lineColor: Color
     var chartFreeLineText: String = ""
+    var direction: Direction = .equal
     var isMostEmpty = false
     var isMostFull = false
     
     let preferences: PreferencesViewModel
 
+    enum Direction {
+        case up
+        case down
+        case equal
+    }
+    
     public var sizes: [SizeInfo] = []
     
     var id = UUID()
@@ -31,7 +40,17 @@ class VolumeViewModel: Identifiable,
     var description: String {
         "\(volume.name) \(chartFreeLineText)"
     }
-    
+
+    var weightAdjustedColor: Color {
+        if showLowSpaceError {
+            return .red
+        } else if showLowSpaceWarning {
+            return .yellow
+        } else {
+            return lineColor 
+        }
+    }
+
     static func == (lhs: VolumeViewModel, rhs: VolumeViewModel) -> Bool {
         lhs.volume == rhs.volume
     }
@@ -44,6 +63,10 @@ class VolumeViewModel: Identifiable,
 
     public var showLowSpaceWarning: Bool {
         isBelow(gigs: self.preferences.lowSpaceWarningThresholdGigs)
+    }
+    
+    public var showLowSpaceError: Bool {
+        isBelow(gigs: self.preferences.lowSpaceErrorThresholdGigs)
     }
     
     public func isBelow(gigs: UInt) -> Bool {
@@ -81,7 +104,34 @@ class VolumeViewModel: Identifiable,
     }
 
     func updateChartFreeLineText() {
-        if let lastSize = self.lastSize {
+
+        if self.sizes.count > 2 {
+            let old = self.sizes[self.sizes.count-3]
+            let new = self.sizes[self.sizes.count-1]
+
+            chartFreeLineText = "\(new.freeSizeInt)"
+            if old.freeSize_k == new.freeSize_k {
+                direction = .equal
+            } else if old.freeSize_k < new.freeSize_k {
+                direction = .up
+            } else  {
+                direction = .down
+            }
+            
+        } else if self.sizes.count > 1 {
+            let old = self.sizes[self.sizes.count-2]
+            let new = self.sizes[self.sizes.count-1]
+
+            chartFreeLineText = "\(new.freeSizeInt)"
+            if old.freeSize_k == new.freeSize_k {
+                direction = .equal
+            } else if old.freeSize_k < new.freeSize_k {
+                direction = .up
+            } else  {
+                direction = .down
+            }
+            
+        } else if let lastSize = self.lastSize {
             chartFreeLineText = "\(lastSize.freeSizeInt)"
         } else {
             chartFreeLineText = ""
@@ -135,4 +185,15 @@ class VolumeViewModel: Identifiable,
 
         return ret
     }
+
+    public var helpText: String {
+        var ret =  ""
+        if let lastSize = self.lastSize {
+            ret = "\(lastSize.totalSize) Volume \(volume.name)\n is mounted on \(volume.mountPoint)"
+        } else {
+            ret = "Volume \(volume.name)"
+        }
+        return ret
+    }
 }
+

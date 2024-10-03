@@ -11,7 +11,7 @@ import SwiftUI
  */
 
 struct VoiceChooserView: View {
-    @Binding var voice: VoiceActor.Voice
+    @Binding var voice: VoiceActor.Voice // XXX make this @Bindable
     @State var testMessage: String = ""
     let labelText: String
     
@@ -39,7 +39,7 @@ struct VoiceChooserView: View {
                 }) {
                     Text("Test")
                 }
-                TextField("voice tests here", text: $testMessage)
+                TextField("Type Here", text: $testMessage)
                   .onSubmit {
                       self.say()
                   }

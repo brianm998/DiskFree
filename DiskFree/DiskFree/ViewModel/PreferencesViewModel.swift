@@ -10,7 +10,9 @@ class PreferencesViewModel {
     var showMultipleCharts: Bool
     var showFreeSpace: Bool
     var showUsedSpace: Bool
+    var soundVoiceOnWarnings: Bool
     var soundVoiceOnErrors: Bool
+    var warningVoice: VoiceActor.Voice
     var errorVoice: VoiceActor.Voice
     var legendFontSize: CGFloat
     var pollIntervalSeconds: Int
@@ -19,11 +21,13 @@ class PreferencesViewModel {
 
     init() {
         self.volumesToShow = []
-        self.showSettingsView = true
+        self.showSettingsView = false
         self.showMultipleCharts = false
         self.showFreeSpace = true
         self.showUsedSpace = false
+        self.soundVoiceOnWarnings = true
         self.soundVoiceOnErrors = true
+        self.warningVoice = .Ellen // random
         self.errorVoice = .Ellen // random
         self.legendFontSize = 24
         self.pollIntervalSeconds = 12
@@ -37,7 +41,9 @@ class PreferencesViewModel {
         self.showMultipleCharts = preferences.showMultipleCharts
         self.showFreeSpace = preferences.showFreeSpace
         self.showUsedSpace = preferences.showUsedSpace
+        self.warningVoice = preferences.warningVoice
         self.errorVoice = preferences.errorVoice
+        self.soundVoiceOnWarnings = preferences.soundVoiceOnWarnings
         self.soundVoiceOnErrors = preferences.soundVoiceOnErrors
         self.legendFontSize = preferences.legendFontSize
         self.pollIntervalSeconds = preferences.pollIntervalSeconds
@@ -51,7 +57,9 @@ class PreferencesViewModel {
                     showMultipleCharts: self.showMultipleCharts,
                     showFreeSpace: self.showFreeSpace,
                     showUsedSpace: self.showUsedSpace,
+                    soundVoiceOnWarnings: self.soundVoiceOnWarnings,
                     soundVoiceOnErrors: self.soundVoiceOnErrors,
+                    warningVoice: self.warningVoice,
                     errorVoice: self.errorVoice,
                     legendFontSize: self.legendFontSize,
                     pollIntervalSeconds: self.pollIntervalSeconds,

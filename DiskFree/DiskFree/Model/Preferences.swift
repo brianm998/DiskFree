@@ -7,7 +7,9 @@ public struct Preferences: Codable, Sendable {
     let showMultipleCharts: Bool
     let showFreeSpace: Bool
     let showUsedSpace: Bool
+    let soundVoiceOnWarnings: Bool
     let soundVoiceOnErrors: Bool
+    let warningVoice: VoiceActor.Voice
     let errorVoice: VoiceActor.Voice
     let legendFontSize: CGFloat
     let pollIntervalSeconds: Int

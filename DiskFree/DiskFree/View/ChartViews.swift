@@ -71,13 +71,34 @@ struct ChartViews: View {
                                     //          .background(volumeView.lineColor)
                                     Text(volumeView.chartFreeLineText)
                                       .font(.system(size: viewModel.preferences.legendFontSize))
-                                      .foregroundStyle(volumeView.showLowSpaceWarning ? .red : volumeView.lineColor)
+                                      .foregroundStyle(volumeView.weightAdjustedColor)
                                       .blinking(if: volumeView.showLowSpaceWarning,
                                                   duration: 0.4)
+
+                                    switch volumeView.direction {
+                                    case .equal:
+                                        Group { }
+
+                                    case .up:
+                                        Image(systemName: "arrow.up")
+                                          .resizable()
+                                          .aspectRatio(contentMode: .fit)
+                                          .foregroundColor(.green)
+                                          .frame(width: viewModel.preferences.legendFontSize*0.66,
+                                                 height: viewModel.preferences.legendFontSize*0.66)
+                                    case .down:
+                                        Image(systemName: "arrow.down")
+                                          .resizable()
+                                          .aspectRatio(contentMode: .fit)
+                                          .foregroundColor(.red)
+                                          .frame(width: viewModel.preferences.legendFontSize*0.66,
+                                                 height: viewModel.preferences.legendFontSize*0.66)
+                                    }
                                     
                                     // never ends :(                .animation(Animation.easeInOut(duration:0.4).repeatForever(autoreverses:true))
                                     
                                 }
+                                  .help(volumeView.helpText)
                             }
                         }
                     }
@@ -175,7 +196,7 @@ struct ChartViews: View {
                                   .annotation(position: .leading, alignment: .top) {
                                       Text(volumeView.volume.name)
                                         .font(.system(size: 22))
-                                        .foregroundStyle(volumeView.lineColor)
+                                        .foregroundStyle(volumeView.weightAdjustedColor)
                                         .blinking(if: volumeView.showLowSpaceWarning,
                                                     duration: 0.4)
                                   } 

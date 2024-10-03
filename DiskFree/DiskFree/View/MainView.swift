@@ -5,14 +5,13 @@ struct MainView: View {
     @State var viewModel: ViewModel
     
     var body: some View {
-        VStack {
-            HStack {
-              ChartViews(viewModel: viewModel)
-                if viewModel.preferences.showSettingsView {
-                  SettingsView(viewModel: viewModel)
-                }
-            }
-        }
+
+        ChartViews(viewModel: viewModel)
+
+          .sheet(isPresented: $viewModel.preferences.showSettingsView) {
+              SettingsView(viewModel: viewModel)
+          }
+
           .toolbar {
               if viewModel.volumeRecordsTimeDurationSeconds != 0 {
                   ToolbarItem(placement: .principal) {
@@ -27,11 +26,8 @@ struct MainView: View {
               }
               ToolbarItem(placement: .primaryAction) {
                   Toggle(isOn: $viewModel.preferences.showSettingsView) {
-                      if viewModel.preferences.showSettingsView {
-                          Image(systemName: "chevron.right")
-                      } else {
-                          Image(systemName: "chevron.left")
-                      }
+                      Image(systemName: "gearshape")
+                        .help("Show Settings")
                   }
                   .onChange(of: viewModel.preferences.showSettingsView) { _, value in
                       viewModel.update()

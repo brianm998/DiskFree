@@ -18,7 +18,6 @@ import Foundation
  - show on chart where low space threshold is
    - allow changing it by dragging it
  - allow hover over tool tips for free space entries
- - display volume tragectory (up/down/static)    
  */
 public actor Manager: Sendable {
 
