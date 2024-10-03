@@ -43,16 +43,6 @@ struct ChartViews: View {
         }
     }
 
-    private var volumesSortedByEmptyFirst: [VolumeViewModel] {
-        let list: [VolumeViewModel] = viewModel.volumes
-
-        let ret = list.sorted { (a: VolumeViewModel, b: VolumeViewModel) in
-            a.lastFreeSize() > b.lastFreeSize()
-        }
-        
-        return ret
-    }
-    
     var legendForCombinedChart: some View {
         Group {
             if viewModel.volumes.count > 0 {
@@ -60,7 +50,7 @@ struct ChartViews: View {
                     Text("Free Space")
                       .font(.system(size: viewModel.preferences.legendFontSize))
                     Grid(alignment: .leading) {
-                        ForEach(self.volumesSortedByEmptyFirst) { volumeView in
+                        ForEach(self.viewModel.volumesSortedByEmptyFirst) { volumeView in
                             if volumeView.isSelected {
                                 GridRow {
                                     Text(volumeView.volume.name)
@@ -267,46 +257,45 @@ struct ChartViews: View {
     
     var multiCharts: some View {
         VStack {
-            ForEach(volumesSortedByEmptyFirst) { volumeView in
-                if volumeView.isSelected {
-                    HStack {
-                        Chart(volumeView.sizes) { sizeData in
-                            if viewModel.preferences.showFreeSpace {
-                                AreaMark(
-                                  x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
-			          y: .value("free", sizeData.gigsFree),
-                                  series: .value("G", "b"),
-                                  stacking: .unstacked
-			        )
-			          .lineStyle(StrokeStyle(lineWidth: 2))
-			          .foregroundStyle(greenGradientColor)
-			          .interpolationMethod(.cardinal)
+            ScrollView {
+                ForEach(viewModel.volumesSortedByEmptyFirst) { volumeView in
+                    if volumeView.isSelected {
+                        HStack {
+                            Chart(volumeView.sizes) { sizeData in
+                                if viewModel.preferences.showFreeSpace {
+                                    AreaMark(
+                                      x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
+			              y: .value("free", sizeData.gigsFree),
+                                      series: .value("G", "b"),
+                                      stacking: .unstacked
+			            )
+			              .lineStyle(StrokeStyle(lineWidth: 2))
+			              .foregroundStyle(greenGradientColor)
+			              .interpolationMethod(.cardinal)
+                                }
+                                if viewModel.preferences.showUsedSpace {
+                                    AreaMark(
+                                      x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
+			              y: .value("used", sizeData.gigsUsed),
+                                      series: .value("f", "a"),
+                                      stacking: .unstacked
+			            )
+			              .lineStyle(StrokeStyle(lineWidth: 2))
+			              .foregroundStyle(redGradientColor)
+			              .interpolationMethod(.cardinal)
+                                }
                             }
-                            if viewModel.preferences.showUsedSpace {
-                                AreaMark(
-                                  x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
-			          y: .value("used", sizeData.gigsUsed),
-                                  series: .value("f", "a"),
-                                  stacking: .unstacked
-			        )
-			          .lineStyle(StrokeStyle(lineWidth: 2))
-			          .foregroundStyle(redGradientColor)
-			          .interpolationMethod(.cardinal)
+                            VStack(alignment: .leading) {
+                                Text(volumeView.volume.name)
+                                if let volumeSize = volumeView.lastSize {
+                                    Text("\(volumeSize.totalSize) total")
+                                    Text("\(volumeSize.freeSize) free")
+                                    Text("\(volumeSize.usedSize) used")
+                                }
                             }
+                              .frame(minWidth: 100)
+                            //                    Text("\(volumeView.sizes.count) sizes \(volumeView.counter) counter")
                         }
-                          .chartYScale(domain:volumeView.minGigs(showFree: viewModel.preferences.showFreeSpace,
-                                                                 showUsed: viewModel.preferences.showUsedSpace)...volumeView.maxGigs(showFree: viewModel.preferences.showFreeSpace,
-                                                                                                                                     showUsed: viewModel.preferences.showUsedSpace))
-                        VStack(alignment: .leading) {
-                            Text(volumeView.volume.name)
-                            if let volumeSize = volumeView.lastSize {
-                                Text("\(volumeSize.totalSize) total")
-                                Text("\(volumeSize.freeSize) free")
-                                Text("\(volumeSize.usedSize) used")
-                            }
-                        }
-                          .frame(minWidth: 100)
-                        //                    Text("\(volumeView.sizes.count) sizes \(volumeView.counter) counter")
                     }
                 }
             }

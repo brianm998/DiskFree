@@ -51,6 +51,12 @@ public final class ViewModel {
         preferences.legendFontSize += 1
         savePreferences()
     }
+
+    var volumesSortedByEmptyFirst: [VolumeViewModel] {
+        volumes.sorted { (a: VolumeViewModel, b: VolumeViewModel) in
+            a.lastFreeSize() > b.lastFreeSize()
+        }
+    }
     
     func listVolumes() {
         Task {
