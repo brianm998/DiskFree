@@ -5,8 +5,6 @@ import Foundation
 
  todo:
 
- - limit number of size records kept
- - allow chaging query rate in gui somewhere
  - support for SANs (make sure to not keep them always alive)
  - better handle multiple volumes on one physical unit
    - have a double click pull down list that allows choosing what parts based upon crap
@@ -17,7 +15,7 @@ import Foundation
  - missing visual error messages to user
  - show on chart where low space threshold is
    - allow changing it by dragging it
- - allow hover over tool tips for free space entries
+ - create app icon 
  */
 public actor Manager: Sendable {
 
@@ -40,14 +38,14 @@ public actor Manager: Sendable {
     }
     
     // data older than this is discarded
-    private var maxDataAgeSeconds: TimeInterval = 60*60
+    private var maxDataAgeMinutes: TimeInterval = 60
     
     // keep track of volume sizes
 
     let diskUtilActor = ShellActor("diskutil", arguments: ["info", "-all"])
 
-    func set(maxDataAgeSeconds: TimeInterval) {
-        self.maxDataAgeSeconds = maxDataAgeSeconds
+    func set(maxDataAgeMinutes: TimeInterval) {
+        self.maxDataAgeMinutes = maxDataAgeMinutes
     }
     
     func listVolumes() async throws -> [Volume] {
@@ -119,7 +117,7 @@ public actor Manager: Sendable {
         }
 
         // only keep newer entries 
-        let maxOldAge = Date().timeIntervalSince1970 - maxDataAgeSeconds - 60
+        let maxOldAge = Date().timeIntervalSince1970 - maxDataAgeMinutes*60 - 60
         
         for (volume, sizes) in volumeSizes {
             var newEnough: [SizeInfo] = []

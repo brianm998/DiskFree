@@ -83,7 +83,7 @@ Filesystem    1024-blocks       Used Available Capacity iused      ifree %iused 
         } else if sizeInKilobytes < oneTera {
             return String(format: "%dG", sizeInKilobytes/oneGiga)
         } else {
-            return String(format: "%dT", sizeInKilobytes/oneTera)
+            return String(format: "%.2fT", Double(sizeInKilobytes)/Double(oneTera))
         }
     }
 }

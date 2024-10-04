@@ -2,19 +2,38 @@ import Foundation
 
 
 public struct Preferences: Codable, Sendable {
-    let volumesToShow: [String]
-    let showSettingsView: Bool
-    let chartType: ChartType
-    let showFreeSpace: Bool
-    let showUsedSpace: Bool
-    let soundVoiceOnWarnings: Bool
-    let soundVoiceOnErrors: Bool
-    let warningVoice: VoiceActor.Voice
-    let errorVoice: VoiceActor.Voice
-    let legendFontSize: CGFloat
-    let pollIntervalSeconds: Int
-    let lowSpaceWarningThresholdGigs: UInt
-    let lowSpaceErrorThresholdGigs: UInt // not used
+    var volumesToShow: Set<String>
+    var showSettingsView: Bool
+    var chartType: ChartType
+    var showFreeSpace: Bool
+    var showUsedSpace: Bool
+    var soundVoiceOnWarnings: Bool
+    var soundVoiceOnErrors: Bool
+    var warningVoice: VoiceActor.Voice
+    var errorVoice: VoiceActor.Voice
+    var legendFontSize: CGFloat
+    var pollIntervalSeconds: Int
+    var lowSpaceWarningThresholdGigs: UInt
+    var lowSpaceErrorThresholdGigs: UInt // not used
+    var maxDataAgeMinutes: TimeInterval
+
+    init() {
+        // defaults are set here
+        volumesToShow = []
+        showSettingsView = false
+        chartType = .combined
+        showFreeSpace = true
+        showUsedSpace = false
+        soundVoiceOnWarnings = true
+        soundVoiceOnErrors = true
+        warningVoice = .Ellen // random
+        errorVoice = .Ellen // random
+        legendFontSize = 24
+        pollIntervalSeconds = 12
+        lowSpaceWarningThresholdGigs = 100
+        lowSpaceErrorThresholdGigs = 20
+        maxDataAgeMinutes = 60 // one hour
+    }
 }
 
 public actor PreferenceManager {

@@ -3,7 +3,8 @@ import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        MainView(viewModel: ViewModel())
+        MainView()
+          .environment(ViewModel())
     }
 }
 

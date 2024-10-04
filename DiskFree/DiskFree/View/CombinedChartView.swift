@@ -2,7 +2,7 @@ import SwiftUI
 import Charts
 
 struct CombinedChartView: View {
-    @State var viewModel: ViewModel
+    @Environment(ViewModel.self) var viewModel: ViewModel
 
     var body: some View {
         HStack(alignment: .top) {

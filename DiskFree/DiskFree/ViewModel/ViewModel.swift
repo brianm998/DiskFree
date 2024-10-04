@@ -10,9 +10,14 @@ public final class ViewModel {
      @Bindable
      @State
      @Environment
+
+     https://forums.developer.apple.com/forums/thread/735416
+     
      */
     var volumes: [VolumeViewModel] = []
-    var preferences = PreferencesViewModel()
+
+    var preferences = Preferences()
+    
     var warningVolumes: Set<String> = []
     var errorVolumes: Set<String> = []
     var volumeRecordsTimeDurationSeconds: TimeInterval = 0
@@ -27,8 +32,9 @@ public final class ViewModel {
                let preferences = await preferenceManager.getPreferences()
             {
                 await MainActor.run {
-                  self.preferences = PreferencesViewModel(preferences: preferences)
+                    self.preferences = preferences
                 }
+                await manager.set(maxDataAgeMinutes: preferences.maxDataAgeMinutes)
             }
         }
     }
@@ -347,6 +353,12 @@ public final class ViewModel {
         }
     }
 
+    func updateManager() {
+      Task {
+       await self.manager.set(maxDataAgeMinutes: preferences.maxDataAgeMinutes)
+      }
+    }
+    
     func update(for volumeViewModel: VolumeViewModel? = nil) { 
         if let volumeViewModel {
             if volumeViewModel.isSelected {
@@ -359,7 +371,7 @@ public final class ViewModel {
     }
 
     func savePreferences() {
-        let prefsToSave = self.preferences.preferencesToSave
+        let prefsToSave = self.preferences
         Task {
             do {
               await self.preferenceManager?.set(preferences: prefsToSave)

@@ -1,15 +1,24 @@
 import SwiftUI
 
-
-
 struct SettingsView: View {
-    @State var viewModel: ViewModel
+    @Environment(ViewModel.self) var viewModel: ViewModel
 
     var generalSettings: some View {
-        VStack(alignment: .leading) {
+        @Bindable var viewModel = viewModel
+
+        return VStack(alignment: .leading) {
             Text("General")
               .font(.system(size: 18))
               .foregroundColor(.gray)
+
+            Picker("Chart Type", selection: $viewModel.preferences.chartType) {
+                ForEach(ChartType.allCases) { type in
+                    Text(type.description)
+                }
+            }
+              .onChange(of: viewModel.preferences.chartType) { _, value in
+                  viewModel.update()
+              }
 
             Toggle(isOn: $viewModel.preferences.showUsedSpace) {
                 Text("show used space")
@@ -25,15 +34,6 @@ struct SettingsView: View {
                   viewModel.update()
               }
 
-            Picker("Chart Type", selection: $viewModel.preferences.chartType) {
-                ForEach(ChartType.allCases) { type in
-                    Text(type.description)
-                }
-            }
-              .onChange(of: viewModel.preferences.chartType) { _, value in
-                  viewModel.update()
-              }
-
             
             HStack {
                 Text("Check Every")
@@ -43,11 +43,25 @@ struct SettingsView: View {
                   .frame(maxWidth: 22)
                 Text("Seconds")
             }
+
+            HStack {
+                Text("Keep")
+                TextField("\(viewModel.preferences.maxDataAgeMinutes)",
+                          value: $viewModel.preferences.maxDataAgeMinutes,
+                          format: .number)
+                  .onChange(of: viewModel.preferences.maxDataAgeMinutes) { _, value in
+                      viewModel.updateManager()
+                  }
+
+                  .frame(maxWidth: 22)
+                Text("Minutes of Data")
+            }
         }
     }    
 
     var diskSettings: some View {
-        VStack(alignment: .leading) {
+        @Bindable var viewModel = viewModel
+        return VStack(alignment: .leading) {
             Text("Disks")
               .font(.system(size: 18))
               .foregroundColor(.gray)
@@ -58,10 +72,8 @@ struct SettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading) {
-
-                    ForEach(self.viewModel.volumes) { volumeView in
-                        VolumeChoiceItemView(viewModel: viewModel,
-                                             volumeViewModel: volumeView)
+                    ForEach($viewModel.volumes) { volumeView in
+                        VolumeChoiceItemView(volumeViewModel: volumeView)
                     }
                 }
             }
@@ -77,7 +89,9 @@ struct SettingsView: View {
     }
     
     var audioSettings: some View {
-        VStack(alignment: .leading) {
+        @Bindable var viewModel = viewModel
+
+        return VStack(alignment: .leading) {
             Text("Audio")
               .font(.system(size: 18))
               .foregroundColor(.gray)

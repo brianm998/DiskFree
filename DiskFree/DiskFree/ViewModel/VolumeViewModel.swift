@@ -1,8 +1,6 @@
 import SwiftUI
 import Combine
 
-
-
 @Observable
 class VolumeViewModel: Identifiable,
                        Hashable,
@@ -16,9 +14,9 @@ class VolumeViewModel: Identifiable,
     var direction: Direction = .equal
     var isMostEmpty = false
     var isMostFull = false
-    
-    let preferences: PreferencesViewModel
 
+    var preferences: Preferences
+    
     enum Direction {
         case up
         case down
@@ -55,14 +53,14 @@ class VolumeViewModel: Identifiable,
         lhs.volume == rhs.volume
     }
 
-    public init(volume: Volume, color: Color, preferences: PreferencesViewModel) {
+    public init(volume: Volume, color: Color, preferences: Preferences) {
         self.volume = volume
         self.lineColor = color
         self.preferences = preferences
     }
 
     public var showLowSpaceWarning: Bool {
-        isBelow(gigs: self.preferences.lowSpaceWarningThresholdGigs)
+      isBelow(gigs: self.preferences.lowSpaceWarningThresholdGigs)
     }
     
     public var showLowSpaceError: Bool {

@@ -4,14 +4,14 @@ import SwiftUI
 /*
 
 
- make a swift view that has a @State element that is a VoiceActor.Voice
+ a swift view that has a @State element that is a VoiceActor.Voice
  and a text box (with sample text) for testing what each one sounds like.
 
  
  */
 
 struct VoiceChooserView: View {
-    @Binding var voice: VoiceActor.Voice // XXX make this @Bindable
+    @Binding var voice: VoiceActor.Voice
     @State var testMessage: String = ""
     let labelText: String
     

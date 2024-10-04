@@ -2,14 +2,14 @@ import SwiftUI
 
 struct MainView: View {
 
-    @State var viewModel: ViewModel
+    @Environment(ViewModel.self) var viewModel: ViewModel
     
     var body: some View {
+        @Bindable var viewModel = viewModel
 
-        ChartViews(viewModel: viewModel)
-
+        return ChartViews()
           .sheet(isPresented: $viewModel.preferences.showSettingsView) {
-              SettingsView(viewModel: viewModel)
+              SettingsView()
           }
 
           .toolbar {

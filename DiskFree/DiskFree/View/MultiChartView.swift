@@ -2,7 +2,7 @@ import SwiftUI
 import Charts
 
 struct MultiChartView: View {
-    @State var viewModel: ViewModel
+    @Environment(ViewModel.self) var viewModel: ViewModel
 
     var redGradientColor: LinearGradient {
         LinearGradient(gradient: Gradient(colors: [Color.red.opacity(0.8),

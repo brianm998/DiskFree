@@ -2,14 +2,14 @@ import SwiftUI
 import Charts
 
 struct ChartViews: View {
-    @State var viewModel: ViewModel
+    @Environment(ViewModel.self) var viewModel: ViewModel
 
     var body: some View {
         switch viewModel.preferences.chartType {
         case .combined:
-            CombinedChartView(viewModel: viewModel)
+            CombinedChartView()
         case .separate:
-            MultiChartView(viewModel: viewModel)
+            MultiChartView()
         }
     }
 }
