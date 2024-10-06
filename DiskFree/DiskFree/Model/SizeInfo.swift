@@ -81,7 +81,6 @@ public struct SizeInfo: Sendable,
     static let oneTera:Int = SizeInfo.oneGiga*1024 // 1 tera is 1024 gigs
 
     private func userReadable(_ sizeInBytes: Int) -> String {
-        print("size \(sizeInBytes) oneKilo \(SizeInfo.oneKilo) oneMega \(SizeInfo.oneMega) oneGiga \(SizeInfo.oneGiga)")
         if sizeInBytes < SizeInfo.oneMega {
             return String(format: "%.2fK", Double(sizeInBytes))
         } else if sizeInBytes < SizeInfo.oneGiga {

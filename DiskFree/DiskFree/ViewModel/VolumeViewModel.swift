@@ -10,8 +10,136 @@ class VolumeViewModel: Identifiable,
     var lastSize: SizeInfo?
     public var isSelected = true
     var lineColor: Color
-    var chartFreeLineText: String = ""
-    var direction: Direction = .equal
+    var chartFreeLineText: String {
+        if self.sizes.count > 1 {
+            let new = self.sizes[self.sizes.count-1]
+            
+            return "\(new.freeSizeInt)"
+            
+        } else if let lastSize = self.lastSize {
+            return "\(lastSize.freeSizeInt)"
+        } else {
+            return ""
+        }
+    }
+
+    func changeAmount(for old: SizeInfo, and new: SizeInfo) -> Double { // kb/sed
+        let diffInKB = abs(Int(new.freeSize_k) - Int(old.freeSize_k))
+        let timeDiff = abs(new.timestamp - old.timestamp)
+        return Double(diffInKB)/timeDiff
+    }
+    
+    func changeString(for old: SizeInfo, and new: SizeInfo) -> String {
+
+        let kbPerSec = changeAmount(for: old, and: new)
+        
+/*        if kbPerSec < 1024 {
+            return String(format: "%.0fkb/s", kbPerSec)
+        } else*/ if kbPerSec < 1024*1024 {
+            return String(format: "%.0f", kbPerSec/1024)
+        } else {
+            return String(format: "%.1f", kbPerSec/(1024*1024))
+        }
+    }
+
+    var shouldShowChange: Bool {
+        if self.sizes.count > 2 {
+            let old = self.sizes[self.sizes.count-3]
+            let new = self.sizes[self.sizes.count-1]
+
+
+            return changeAmount(for: old, and: new) > 1024
+            
+            
+        } else if self.sizes.count > 1 {
+            let old = self.sizes[self.sizes.count-2]
+            let new = self.sizes[self.sizes.count-1]
+
+            return changeAmount(for: old, and: new) > 1024
+        } else {
+            return false
+        }
+    }
+    
+    var change: String {
+        if self.sizes.count > 2 {
+            let old = self.sizes[self.sizes.count-3]
+            let new = self.sizes[self.sizes.count-1]
+
+          return changeString(for: old, and: new)
+            
+            
+        } else if self.sizes.count > 1 {
+            let old = self.sizes[self.sizes.count-2]
+            let new = self.sizes[self.sizes.count-1]
+
+          return changeString(for: old, and: new)
+        } else {
+            return ""
+        }
+    }
+    
+    func changeString2(for old: SizeInfo, and new: SizeInfo) -> String {
+        let diffInKB = abs(Int(new.freeSize_k) - Int(old.freeSize_k))
+        let timeDiff = abs(new.timestamp - old.timestamp)
+        let kbPerSec = Double(diffInKB)/timeDiff
+
+/*        if kbPerSec < 1024 {
+            return String(format: "%.0fkb/s", kbPerSec)
+        } else*/ if kbPerSec < 1024*1024 {
+            return String(format: "mb/s")
+        } else {
+            return String(format: "gb/s")
+        }
+    }
+    
+    var change2: String {
+        if self.sizes.count > 2 {
+            let old = self.sizes[self.sizes.count-3]
+            let new = self.sizes[self.sizes.count-1]
+
+          return changeString2(for: old, and: new)
+            
+            
+        } else if self.sizes.count > 1 {
+            let old = self.sizes[self.sizes.count-2]
+            let new = self.sizes[self.sizes.count-1]
+
+          return changeString2(for: old, and: new)
+        } else {
+            return ""
+        }
+    }
+    
+    var direction: Direction {
+        if self.sizes.count > 2 {
+            let old = self.sizes[self.sizes.count-3]
+            let new = self.sizes[self.sizes.count-1]
+
+            if old.freeSize_k == new.freeSize_k {
+                return .equal
+            } else if old.freeSize_k < new.freeSize_k {
+                return .up
+            } else  {
+                return .down
+            }
+            
+        } else if self.sizes.count > 1 {
+            let old = self.sizes[self.sizes.count-2]
+            let new = self.sizes[self.sizes.count-1]
+
+            if old.freeSize_k == new.freeSize_k {
+                return .equal
+            } else if old.freeSize_k < new.freeSize_k {
+                return .up
+            } else  {
+                return .down
+            }
+        } else {
+            return .equal
+        }
+    }
+    
     var isMostEmpty = false
     var isMostFull = false
 
@@ -101,41 +229,6 @@ class VolumeViewModel: Identifiable,
         return ret
     }
 
-    func updateChartFreeLineText() {
-
-        if self.sizes.count > 2 {
-            let old = self.sizes[self.sizes.count-3]
-            let new = self.sizes[self.sizes.count-1]
-
-            chartFreeLineText = "\(new.freeSizeInt)"
-            if old.freeSize_k == new.freeSize_k {
-                direction = .equal
-            } else if old.freeSize_k < new.freeSize_k {
-                direction = .up
-            } else  {
-                direction = .down
-            }
-            
-        } else if self.sizes.count > 1 {
-            let old = self.sizes[self.sizes.count-2]
-            let new = self.sizes[self.sizes.count-1]
-
-            chartFreeLineText = "\(new.freeSizeInt)"
-            if old.freeSize_k == new.freeSize_k {
-                direction = .equal
-            } else if old.freeSize_k < new.freeSize_k {
-                direction = .up
-            } else  {
-                direction = .down
-            }
-            
-        } else if let lastSize = self.lastSize {
-            chartFreeLineText = "\(lastSize.freeSizeInt)"
-        } else {
-            chartFreeLineText = ""
-        }
-    }
-    
     var chartUsedLineText: String {
         if let lastSize = self.lastSize {
             return "\(self.volume.name) - \(lastSize.usedSizeInt) used"

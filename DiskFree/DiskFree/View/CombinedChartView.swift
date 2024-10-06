@@ -24,38 +24,85 @@ struct CombinedChartView: View {
                 VStack(alignment: .leading) {
                     Text("Free Space")
                       .font(.system(size: viewModel.preferences.legendFontSize))
-                    Grid(alignment: .leading) {
+                    Grid(alignment: .leading, horizontalSpacing: 4, verticalSpacing: 0) {
                         ForEach(self.viewModel.volumesSortedByEmptyFirst) { volumeView in
                             if volumeView.isSelected {
-                                GridRow {
+                              GridRow(alignment: .lastTextBaseline) {
                                     Text(volumeView.volume.userVisibleMountPoint)
                                       .font(.system(size: viewModel.preferences.legendFontSize))
                                       .foregroundStyle(volumeView.lineColor)
+                                    //.background(.red)
+
+//                                    Spacer()
+//                                      .frame(maxWidth: 5)
+                                     
                                     Text(volumeView.chartFreeLineText)
                                       .font(.system(size: viewModel.preferences.legendFontSize))
                                       .foregroundStyle(volumeView.weightAdjustedColor)
                                       .blinking(if: volumeView.showLowSpaceWarning,
                                                   duration: 0.4)
+                                      //.background(.blue)
+//                                    Group {
+                                        if volumeView.shouldShowChange {
+                                            switch volumeView.direction {
+                                            case .equal:
+                                                HStack { Text("") }
+//                                                  .background(.purple)
+//                                                  .frame(minWidth: 120)
+                                                  .frame(minWidth: 50)
 
-                                    switch volumeView.direction {
-                                    case .equal:
-                                        Group { }
+                                            case .up:
+                                                HStack(spacing: 0) {
+                                                    Image(systemName: "arrow.up")
+                                                      .resizable()
+                                                      .aspectRatio(contentMode: .fit)
+                                                      .foregroundColor(.green)
+                                                      .frame(width: viewModel.preferences.legendFontSize*0.65,
+                                                             height: viewModel.preferences.legendFontSize*0.65)
+                                                    VStack(/*spacing: 0, */alignment: .leading) {
+                                                        Text(volumeView.change)
+                                                          .foregroundColor(.green)
+                                                          .font(.system(size: viewModel.preferences.legendFontSize/2.5))
+                                                        Text(volumeView.change2)
+                                                          .foregroundColor(.green)
+                                                          .font(.system(size: viewModel.preferences.legendFontSize/2.5))
+                                                    }
+                                                }
+                                                  .animation(.easeInOut, value: volumeView.direction)
+                                                  .frame(minWidth: 50)
+                                                  //.background(.purple)
+                                            case .down:
+                                                HStack(spacing: 0) {
+                                                    Image(systemName: "arrow.down")
+                                                      .resizable()
+                                                      .aspectRatio(contentMode: .fit)
+                                                      .foregroundColor(.red)
+                                                      .opacity(0.7)
+                                                      .frame(width: viewModel.preferences.legendFontSize*0.65,
+                                                             height: viewModel.preferences.legendFontSize*0.65)
+                                                    VStack(/*spacing: 0, */alignment: .leading)  {
+                                                        Text(volumeView.change)
+                                                          .foregroundColor(.red)
+                                                          .font(.system(size: viewModel.preferences.legendFontSize/2.5))
+                                                        Text(volumeView.change2)
+                                                          .foregroundColor(.red)
+                                                          .font(.system(size: viewModel.preferences.legendFontSize/2.5))
+                                                    }
+                                                }
+                                                  .animation(.easeInOut, value: volumeView.direction)
+                                                //.animation(.easeInOut, value: volumeView.direction                                                  .frame(minWidth: 50))
+                                                  //.background(.orange)
+                                            }
+                                        } else {
+                                            HStack { Text("T") }
+                                              .opacity(0)
+                                              .frame(minWidth: 50)
+                                              //.background(.purple)
 
-                                    case .up:
-                                        Image(systemName: "arrow.up")
-                                          .resizable()
-                                          .aspectRatio(contentMode: .fit)
-                                          .foregroundColor(.green)
-                                          .frame(width: viewModel.preferences.legendFontSize*0.66,
-                                                 height: viewModel.preferences.legendFontSize*0.66)
-                                    case .down:
-                                        Image(systemName: "arrow.down")
-                                          .resizable()
-                                          .aspectRatio(contentMode: .fit)
-                                          .foregroundColor(.red)
-                                          .frame(width: viewModel.preferences.legendFontSize*0.66,
-                                                 height: viewModel.preferences.legendFontSize*0.66)
-                                    }
+                                        }
+//                                    }
+//                                      .frame(minWidth: 50)
+                                      //.background(.yellow)
                                 }
                                   .help(volumeView.helpText)
                             }
@@ -108,7 +155,8 @@ struct CombinedChartView: View {
                                                      dash: [12],
                                                      dashPhase: 0))
 
-                            if volumeView.isMostFull {
+                            if false && volumeView.isMostFull {
+                                // bottom red area mark doesn't look good :(
                                 AreaMark(
                                   x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
 			          y: .value("free", sizeData.gigsFree),

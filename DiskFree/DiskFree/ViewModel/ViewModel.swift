@@ -244,7 +244,6 @@ public final class ViewModel {
             self.volumeRecordsTimeDurationSeconds = duration
             
             for volume in self.volumes {
-                volume.updateChartFreeLineText()
                 if let newSizes = newVolumeSizes[volume.volume.name] {
                     //print("volume.lastSize \(volume.lastSize)")
 
