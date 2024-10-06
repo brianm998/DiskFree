@@ -15,7 +15,16 @@ import Foundation
  - missing visual error messages to user
  - show on chart where low space threshold is
    - allow changing it by dragging it
- - create app icon 
+ - create app icon
+ - add github link in app
+
+ - look into this:
+   diskutil info -plist /
+ - and also this:
+ https://developer.apple.com/documentation/foundation/urlresourcekey/checking_volume_storage_capacity
+
+ - support synthetic.conf for mapping to root symlinks (show /sp, not /Volumes/sp)
+ - show '/' instead of 'Macintosh HD - Data' for the root partition
  */
 public actor Manager: Sendable {
 
@@ -102,7 +111,7 @@ public actor Manager: Sendable {
         let timestamp = Date().timeIntervalSince1970
         for volume in volumes {
             //print("record size of \(volume.name)")
-            if let sizeOfVolume = try await self.sizeOf(volume: volume, at: timestamp) {
+            if let sizeOfVolume = try self.sizeOf(volume: volume, at: timestamp) {
                 if var existingList = volumeSizes[volume.name] {
                     //print("appending to volume list volumeSizes[\(volume.name)].count = \(volumeSizes[volume.name]?.count ?? -1)")
 
@@ -132,7 +141,12 @@ public actor Manager: Sendable {
         return volumeSizes
     }
 
-    func sizeOf(volume: Volume, at timestamp: TimeInterval) async throws -> SizeInfo? {
+
+    func sizeOf(volume: Volume, at timestamp: TimeInterval) throws -> SizeInfo? {
+        try SizeInfo(for: volume.mountPoint, timestamp: timestamp)
+    }
+    
+    func dfSizeOf(volume: Volume, at timestamp: TimeInterval) async throws -> DFSizeInfo? {
         if dfActors[volume] == nil {
             dfActors[volume] = ShellActor("df", arguments: ["-k", "'\(volume.mountPoint)'"])
         }
@@ -141,7 +155,7 @@ public actor Manager: Sendable {
 
         let output = try await duActor.execute()
 
-        return SizeInfo(dfOutput: output, timestamp: timestamp) 
+        return DFSizeInfo(dfOutput: output, timestamp: timestamp)
     }
 }
 
