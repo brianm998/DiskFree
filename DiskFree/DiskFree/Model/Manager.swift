@@ -1,12 +1,13 @@
 import Foundation
 
-
 /*
 
  todo:
 
  - support for SANs (make sure to not keep them always alive)
- - better handle multiple volumes on one physical unit
+   - use DFSizeInfo, figure out how to list them, and see if they are alive wihtout waking them
+   - only poll for size when they're alive, poll for alive or not otherwise
+ - better handle multiple volumes on one physical unit (should be fixed with user visible flag)
    - have a double click pull down list that allows choosing what parts based upon crap
  - write release scripts
  - implement version number somewhere
@@ -25,12 +26,15 @@ import Foundation
 
  - support synthetic.conf for mapping to root symlinks (show /sp, not /Volumes/sp)
  - show '/' instead of 'Macintosh HD - Data' for the root partition
+ - allow toggle between showing important and Opportunistic Usage
+ - find how to identify backup volumes
  */
 public actor Manager: Sendable {
 
     private var volumes: [Volume] = []
     private var dfActors: [Volume:ShellActor] = [:]
 
+    
     private var volumeSizes: VolumeRecords = [:] // keyed by volume.name
 
     public func loadStoredVolumeRecords() async {
@@ -56,8 +60,57 @@ public actor Manager: Sendable {
     func set(maxDataAgeMinutes: TimeInterval) {
         self.maxDataAgeMinutes = maxDataAgeMinutes
     }
+
+    func readRootSymlinks() async throws -> [String: String] { // /Volumes/op -> /op
+        /*
+
+lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 etc -> private/etc
+lrwxr-xr-x    1 root  wheel    25 Sep 26 15:55 home -> /System/Volumes/Data/home
+lrwxr-xr-x    1 root  wheel    28 Sep 29 10:58 mammoth -> /System/Volumes/Data/mammoth
+lrwxr-xr-x    1 root  wheel    24 Sep 26 15:55 mnt -> /System/Volumes/Data/mnt
+lrwxr-xr-x    1 root  wheel    10 Sep 26 15:55 op -> Volumes/op
+drwxr-xr-x    5 root  wheel   160 Jun 25 07:05 opt
+lrwxr-xr-x    1 root  wheel    10 Sep 26 15:55 pp -> Volumes/pp
+drwxr-xr-x    6 root  wheel   192 Sep 26 15:55 private
+lrwxr-xr-x    1 root  wheel    10 Sep 26 15:55 qp -> Volumes/qp
+lrwxr-xr-x    1 root  wheel    10 Sep 26 15:55 rp -> Volumes/rp
+drwxr-xr-x@  77 root  wheel  2464 Sep  5 13:54 sbin
+lrwxr-xr-x    1 root  wheel    10 Sep 26 15:55 sp -> Volumes/sp
+lrwxr-xr-x    1 root  wheel     3 Sep 26 15:55 sw -> usr
+lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 tmp -> private/tmp
+drwxr-xr-x@  11 root  wheel   352 Sep  5 13:54 usr
+lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
+         
+         */
+
+        var ret: [String: String] = [:]
+
+        // first read /etc/synthetic.conf
+        // XXX cannot read synthetic.conf, but can read ls -l / :)
+        let syntheticConfigActor = ShellActor("ls", arguments: ["-l", "/"])
+
+        let output = try await syntheticConfigActor.execute()
+        let outputLines = output.components(separatedBy: "\n")
+
+        print("syntheticConfigOutput \(output)")
+        
+        for line in outputLines {
+            if let match = line.firstMatch(of: /([\/\w]+)\s+->\s+([\/\w]+)$/) {
+                var rootPath = String(match.1)
+                var realPath = String(match.2)
+                if !realPath.starts(with: "/") { realPath = "/\(realPath)" }
+                if !rootPath.starts(with: "/") { rootPath = "/\(rootPath)" }
+                ret[realPath] = rootPath
+            }
+        }
+        
+        return ret
+    }
     
     func listVolumes() async throws -> [Volume] {
+
+        let rootSymlinks = try await readRootSymlinks()
+        
         let output = try await diskUtilActor.execute()
 //        print(output)  // printing out the full diskutil output is EXTREMELY verbose
         let outputLines = output.components(separatedBy: "\n")
@@ -76,7 +129,28 @@ public actor Manager: Sendable {
                    readOnly == "No",
                    let volumeName
                 {
-                    ret.append(Volume(name: volumeName, mountPoint: mountPoint))
+                    do {
+                        let volumeInfo = try VolumeInfo(for: mountPoint)
+                        // the user visible mount point is still a valid path,
+                        // but may be a symlink or such, so we can't query at that
+                        // path for volume size, have to use the real mountPoint for that
+                        var userVisibleMountPoint = mountPoint
+                        
+                        if volumeInfo.isBrowsable {
+                            if volumeInfo.isRootFileSystem {
+                                userVisibleMountPoint = "/"
+                            } else if let rootSymlink = rootSymlinks[userVisibleMountPoint] {
+                                userVisibleMountPoint = rootSymlink
+                            }
+                            ret.append(Volume(name: volumeName,
+                                              mountPoint: mountPoint,
+                                              userVisibleMountPoint: userVisibleMountPoint,
+                                              isInternal: volumeInfo.isInternal,
+                                              isEjectable: volumeInfo.isEjectable))
+                        }
+                    } catch {
+                        print("error \(error)")
+                    }
                 }
                 mountPoint = nil
                 readOnly = nil

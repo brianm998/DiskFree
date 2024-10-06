@@ -28,7 +28,7 @@ struct CombinedChartView: View {
                         ForEach(self.viewModel.volumesSortedByEmptyFirst) { volumeView in
                             if volumeView.isSelected {
                                 GridRow {
-                                    Text(volumeView.volume.name)
+                                    Text(volumeView.volume.userVisibleMountPoint)
                                       .font(.system(size: viewModel.preferences.legendFontSize))
                                       .foregroundStyle(volumeView.lineColor)
                                     Text(volumeView.chartFreeLineText)
@@ -131,7 +131,7 @@ struct CombinedChartView: View {
                               .symbolSize(16)
                               .foregroundStyle(volumeView.lineColor)
                               .annotation(position: .leading, alignment: .bottom) {
-                                  Text(volumeView.volume.name)
+                                  Text(volumeView.volume.userVisibleMountPoint)
                                     .font(.system(size: 22))
                                     .foregroundStyle(volumeView.lineColor)
                                     .frame(maxWidth: 50)
