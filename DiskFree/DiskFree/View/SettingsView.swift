@@ -72,7 +72,7 @@ struct SettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading) {
-                    ForEach($viewModel.volumes) { volumeView in
+                    ForEach($viewModel.localVolumes) { volumeView in
                         VolumeChoiceItemView(volumeViewModel: volumeView)
                     }
                 }

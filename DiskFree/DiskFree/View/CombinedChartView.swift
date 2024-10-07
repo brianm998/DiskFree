@@ -20,12 +20,12 @@ struct CombinedChartView: View {
 
     var chartLegend: some View {
         Group {
-            if viewModel.volumes.count > 0 {
+            if viewModel.localVolumes.count > 0 {
                 VStack(alignment: .leading) {
                     Text("Free Space")
                       .font(.system(size: viewModel.preferences.legendFontSize))
                     Grid(alignment: .leading, horizontalSpacing: 4, verticalSpacing: 0) {
-                        ForEach(self.viewModel.volumesSortedByEmptyFirst) { volumeView in
+                        ForEach(self.viewModel.localVolumesSortedByEmptyFirst) { volumeView in
                             if volumeView.isSelected {
                               GridRow(alignment: .lastTextBaseline) {
                                     Text(volumeView.volume.userVisibleMountPoint)
@@ -136,7 +136,7 @@ struct CombinedChartView: View {
         Chart {
 //            let lineWidth = 6
 //            let dotSize = 24//lineWidth*4
-          ForEach(self.viewModel.volumes) { volumeView in
+          ForEach(self.viewModel.localVolumes) { volumeView in
                 if volumeView.isSelected {
                     if viewModel.preferences.showFreeSpace {
                         ForEach(volumeView.sizes) { sizeData in

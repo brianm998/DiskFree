@@ -14,12 +14,12 @@ public final class ViewModel {
      https://forums.developer.apple.com/forums/thread/735416
      
      */
-    var volumes: [VolumeViewModel] = []
+    var localVolumes: [VolumeViewModel] = []
 
     var preferences = Preferences()
     
-    var warningVolumes: Set<String> = []
-    var errorVolumes: Set<String> = []
+    var warningLocalVolumes: Set<String> = []
+    var errorLocalVolumes: Set<String> = []
     var volumeRecordsTimeDurationSeconds: TimeInterval = 0
 
     private var cancellables: Set<AnyCancellable> = []
@@ -46,7 +46,9 @@ public final class ViewModel {
     
     let preferenceManager = PreferenceManager()
     
-    var newVolumeSizes: LocalVolumeRecords = [:]
+    var newLocalVolumeSizes: LocalVolumeRecords = [:]
+
+    var newNetworkVolumeSizes: NetworkVolumeRecords = [:] // XXX use this
 
     func decreaseFontSize() {
         if preferences.legendFontSize > 4 { // XXX hardcoded minimum
@@ -60,8 +62,8 @@ public final class ViewModel {
         savePreferences()
     }
 
-    var volumesSortedByEmptyFirst: [VolumeViewModel] {
-        volumes.sorted { (a: VolumeViewModel, b: VolumeViewModel) in
+    var localVolumesSortedByEmptyFirst: [VolumeViewModel] {
+        localVolumes.sorted { (a: VolumeViewModel, b: VolumeViewModel) in
             a.lastFreeSize() > b.lastFreeSize()
         }
     }
@@ -103,7 +105,7 @@ public final class ViewModel {
                 }
                 await MainActor.run {
                     var colorIndex = 0
-                    self.volumes = volumes.map {
+                    self.localVolumes = volumes.map {
                         let ret = VolumeViewModel(volume: $0,
                                                   color: lineColors[colorIndex],
                                                   preferences: preferences)
@@ -142,10 +144,10 @@ public final class ViewModel {
     
     private func minGigs(showFree: Bool, showUsed: Bool) -> UInt {
         var ret = UInt.max<<8
-        if volumes.count == 0 {
+        if localVolumes.count == 0 {
             return 0
         }
-        for volumeViewModel in volumes {
+        for volumeViewModel in localVolumes {
             if volumeViewModel.isSelected {
                 let maxGigs = volumeViewModel.minGigs(showFree: showFree, showUsed: showUsed)
                 if maxGigs < ret { ret = maxGigs }
@@ -156,10 +158,10 @@ public final class ViewModel {
 
     private func maxGigs(showFree: Bool, showUsed: Bool) -> UInt {
         var ret: UInt = 0
-        if volumes.count == 0 {
+        if localVolumes.count == 0 {
             return UInt.max<<8
         }
-        for volumeViewModel in volumes {
+        for volumeViewModel in localVolumes {
             if volumeViewModel.isSelected {
                 let maxGigs = volumeViewModel.maxGigs(showFree: showFree, showUsed: showUsed)
                 if maxGigs > ret { ret = maxGigs }
@@ -169,13 +171,13 @@ public final class ViewModel {
     }
     
     func clearAll() {
-        for volumeViewModel in volumes {
+        for volumeViewModel in localVolumes {
             volumeViewModel.isSelected = false
         }
     }
 
     func selectAll() {
-        for volumeViewModel in volumes {
+        for volumeViewModel in localVolumes {
             volumeViewModel.isSelected = true
         }
     }
@@ -289,12 +291,12 @@ public final class ViewModel {
         await MainActor.run {
             let startTime = Date().timeIntervalSince1970
 
-            self.newVolumeSizes = records
+            self.newLocalVolumeSizes = records
 
             self.volumeRecordsTimeDurationSeconds = duration
             
-            for volume in self.volumes {
-                if let newSizes = newVolumeSizes[volume.volume.name] {
+            for volume in self.localVolumes {
+                if let newSizes = self.newLocalVolumeSizes[volume.volume.name] {
                     //print("volume.lastSize \(volume.lastSize)")
 
                     let oldSize = volume.lastSize
@@ -314,7 +316,7 @@ public final class ViewModel {
                                                badText: "Low Disk Space Error.  $0 is running EXTREMELY low on free space.  It now has only $1 gigabytes of free space left.",
 
                                                goodText: "$0 is no longer extremely low on free space.  It now has $1 gigabytes of free space left.",
-                                               lowVolumes: &errorVolumes,
+                                               lowVolumes: &errorLocalVolumes,
                                                with: preferences.errorVoice)
                         }
                         if preferences.soundVoiceOnWarnings { 
@@ -325,7 +327,7 @@ public final class ViewModel {
                                                badText: "Low Disk Space Warning.  $0 is running low on free space.  It now has only $1 gigabytes of free space left.",
 
                                                goodText: "$0 is no longer low on free space.  It now has $1 gigabytes of free space left.",
-                                               lowVolumes: &warningVolumes,
+                                               lowVolumes: &warningLocalVolumes,
                                                with: preferences.warningVoice)
                         }
                     }
@@ -333,13 +335,13 @@ public final class ViewModel {
                     //print("updating volume \(volume.volume.name) size to \(newSizes.count)")
                 }
             }
-            self.volumes.sort {
+            self.localVolumes.sort {
                 $0.lastSize?.totalSize_k ?? 0 > $1.lastSize?.totalSize_k ?? 0
             }
 
             // apply colors here
 
-            let volumesEmptyFirst = self.volumes.sorted {
+            let volumesEmptyFirst = self.localVolumes.sorted {
                 $0.lastFreeSize() > $1.lastFreeSize()
             }
             

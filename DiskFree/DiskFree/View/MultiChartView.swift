@@ -21,7 +21,7 @@ struct MultiChartView: View {
     var body: some View {
          VStack {
             ScrollView {
-                ForEach(viewModel.volumesSortedByEmptyFirst) { volumeView in
+                ForEach(viewModel.localVolumesSortedByEmptyFirst) { volumeView in
                     if volumeView.isSelected {
                         HStack {
                             Chart(volumeView.sizes) { sizeData in
