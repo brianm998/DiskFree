@@ -6,7 +6,7 @@ class LocalVolumeViewModel: Identifiable,
                             Hashable,
                             CustomStringConvertible
 {
-    var volume: Volume
+    var volume: LocalVolume
     var lastSize: SizeInfo?
     public var isSelected = true
     var lineColor: Color
@@ -181,7 +181,7 @@ class LocalVolumeViewModel: Identifiable,
         lhs.volume == rhs.volume
     }
 
-    public init(volume: Volume, color: Color, preferences: Preferences) {
+    public init(volume: LocalVolume, color: Color, preferences: Preferences) {
         self.volume = volume
         self.lineColor = color
         self.preferences = preferences

@@ -1,6 +1,6 @@
 import Foundation
 
-struct Volume: Identifiable, Hashable {
+struct LocalVolume: Identifiable, Hashable {
   
     let name: String
     let mountPoint: String
@@ -25,7 +25,7 @@ struct Volume: Identifiable, Hashable {
         self.isInternal = isInternal
     }
     
-    static func == (lhs: Volume, rhs: Volume) -> Bool {
+    static func == (lhs: LocalVolume, rhs: LocalVolume) -> Bool {
         lhs.name == rhs.name
     }
 

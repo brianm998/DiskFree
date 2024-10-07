@@ -4,11 +4,6 @@ import Foundation
 
  todo:
 
- - support for SANs (make sure to not keep them always alive)
-   - use DFSizeInfo, figure out how to list them, and see if they are alive wihtout waking them
-   - only poll for size when they're alive, poll for alive or not otherwise
- - better handle multiple volumes on one physical unit (should be fixed with user visible flag)
-   - have a double click pull down list that allows choosing what parts based upon crap
  - write release scripts
  - implement version number somewhere
  - allow removing items from chart?
@@ -24,8 +19,6 @@ import Foundation
  - and also this:
  https://developer.apple.com/documentation/foundation/urlresourcekey/checking_volume_storage_capacity
 
- - support synthetic.conf for mapping to root symlinks (show /sp, not /Volumes/sp)
- - show '/' instead of 'Macintosh HD - Data' for the root partition
  - allow toggle between showing important and Opportunistic Usage
  - find how to identify backup volumes
 
@@ -54,7 +47,7 @@ import Foundation
 
 public actor Manager: Sendable {
 
-    private var volumes: [Volume] = []
+    private var volumes: [LocalVolume] = []
 
     private var dfActors: [NetworkVolume:ShellActor] = [:] // used for network volumes 
     
@@ -184,7 +177,7 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
         return ret
     }
     
-    func listLocalVolumes() async throws -> [Volume] {
+    func listLocalVolumes() async throws -> [LocalVolume] {
 
         let rootSymlinks = try await readRootSymlinks()
         
@@ -192,7 +185,7 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
 //        print(output)  // printing out the full diskutil output is EXTREMELY verbose
         let outputLines = output.components(separatedBy: "\n")
 
-        var ret: [Volume]  = []
+        var ret: [LocalVolume]  = []
         
         var mountPoint: String?
         var volumeName: String?
@@ -219,11 +212,11 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
                             } else if let rootSymlink = rootSymlinks[userVisibleMountPoint] {
                                 userVisibleMountPoint = rootSymlink
                             }
-                            ret.append(Volume(name: volumeName,
-                                              mountPoint: mountPoint,
-                                              userVisibleMountPoint: userVisibleMountPoint,
-                                              isInternal: volumeInfo.isInternal,
-                                              isEjectable: volumeInfo.isEjectable))
+                            ret.append(LocalVolume(name: volumeName,
+                                                   mountPoint: mountPoint,
+                                                   userVisibleMountPoint: userVisibleMountPoint,
+                                                   isInternal: volumeInfo.isInternal,
+                                                   isEjectable: volumeInfo.isEjectable))
                         }
                     } catch {
                         print("error \(error)")
@@ -336,7 +329,7 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
 
 
     // size of local volume
-    func sizeOf(volume: Volume, at timestamp: TimeInterval) throws -> SizeInfo? {
+    func sizeOf(volume: LocalVolume, at timestamp: TimeInterval) throws -> SizeInfo? {
         try SizeInfo(for: volume.mountPoint, timestamp: timestamp)
     }
     
