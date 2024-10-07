@@ -2,7 +2,7 @@ import SwiftUI
 
 struct VolumeChoiceItemView: View {
     @Environment(ViewModel.self) var viewModel: ViewModel
-    @Binding var volumeViewModel: VolumeViewModel
+    @Binding var volumeViewModel: LocalVolumeViewModel
     
     var body: some View {
         HStack {

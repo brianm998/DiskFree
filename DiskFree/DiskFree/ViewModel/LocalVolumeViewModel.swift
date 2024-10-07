@@ -2,9 +2,9 @@ import SwiftUI
 import Combine
 
 @Observable
-class VolumeViewModel: Identifiable,
-                       Hashable,
-                       CustomStringConvertible
+class LocalVolumeViewModel: Identifiable,
+                            Hashable,
+                            CustomStringConvertible
 {
     var volume: Volume
     var lastSize: SizeInfo?
@@ -177,7 +177,7 @@ class VolumeViewModel: Identifiable,
         }
     }
 
-    static func == (lhs: VolumeViewModel, rhs: VolumeViewModel) -> Bool {
+    static func == (lhs: LocalVolumeViewModel, rhs: LocalVolumeViewModel) -> Bool {
         lhs.volume == rhs.volume
     }
 
