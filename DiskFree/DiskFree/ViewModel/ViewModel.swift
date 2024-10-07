@@ -41,10 +41,12 @@ public final class ViewModel {
     
     let manager = Manager()
 
-    let recordKeeper = VolumeRecordKeeper()
+    let localVolumeRecordKeeper = LocalVolumeRecordKeeper()
+    let networkVolumeRecordKeeper = NetworkVolumeRecordKeeper()
+    
     let preferenceManager = PreferenceManager()
     
-    var newVolumeSizes: VolumeRecords = [:]
+    var newVolumeSizes: LocalVolumeRecords = [:]
 
     func decreaseFontSize() {
         if preferences.legendFontSize > 4 { // XXX hardcoded minimum
@@ -63,14 +65,41 @@ public final class ViewModel {
             a.lastFreeSize() > b.lastFreeSize()
         }
     }
+
+    func listNetworkVolumes() {
+        self.networkVolumeTask = Task {
+
+            await self.manager.loadStoredNetworkVolumeRecords()
+            
+            var isFirst = true
+            // then iterate until we are cancelled
+            while(true) {
+                do {
+                    await self.networkRecordViewUpdate(records: try await manager.recordNetworkVolumeSizes())
+
+                    try Task.checkCancellation()
+                    if !isFirst {
+                        let seconds = await MainActor.run { preferences.networkPollIntervalSeconds }
+                        
+                        // don't sleep the first time so the graph updates quicker
+                        try await Task.sleep(nanoseconds: UInt64(seconds*1_000_000_000))
+                    }
+                    try Task.checkCancellation()
+                    isFirst = false 
+                } catch {
+                    print("ERROR: \(error)")
+                }
+            }
+        }
+    }
     
-    func listVolumes() {
+    func listLocalVolumes() {
         Task {
             do {
-                await self.manager.loadStoredVolumeRecords()
-                let volumes = try await manager.listVolumes()
-                if preferences.volumesToShow.count == 0 {
-                    preferences.volumesToShow = Set(volumes.map { $0.name })
+                await self.manager.loadStoredLocalVolumeRecords()
+                let volumes = try await manager.listLocalVolumes()
+                if preferences.localVolumesToShow.count == 0 {
+                    preferences.localVolumesToShow = Set(volumes.map { $0.name })
                 }
                 await MainActor.run {
                     var colorIndex = 0
@@ -81,7 +110,7 @@ public final class ViewModel {
                         colorIndex += 1
                         if colorIndex >= lineColors.count { colorIndex = 0 }
 
-                        if preferences.volumesToShow.contains($0.name) {
+                        if preferences.localVolumesToShow.contains($0.name) {
                             ret.isSelected = true
                         } else {
                             ret.isSelected = false
@@ -89,14 +118,15 @@ public final class ViewModel {
                         return ret
                     }
                 }
-                self.startTask()
+                self.startLocalVolumeTask()
             } catch {
                 print("ERROR: \(error)")
             }
         }
     }
 
-    private var task: Task<Void,Never>?
+    private var localVolumeTask: Task<Void,Never>?
+    private var networkVolumeTask: Task<Void,Never>?
 
     public func chartRange(showFree: Bool, showUsed: Bool) -> ClosedRange<UInt> {
 
@@ -219,16 +249,36 @@ public final class ViewModel {
      .teal,
 
      */
+
+    private func networkRecordViewUpdate(records: NetworkVolumeRecords,
+                                         shouldSave: Bool = true) async
+    {
+        if shouldSave {
+            // save them for later
+            Task {
+                do {
+                    try await networkVolumeRecordKeeper?.save(records: records)
+                } catch {
+                    print("cannot save network volume records: \(error)")
+                }
+            }
+        }
+
+        // XXX update the UI
+    }
+
     
-    private func viewUpdate(records: VolumeRecords, shouldSave: Bool = true) async {
+    private func localRecordViewUpdate(records: LocalVolumeRecords,
+                                       shouldSave: Bool = true) async
+    {
 
         if shouldSave {
             // save them for later
             Task {
                 do {
-                    try await recordKeeper?.save(records: records)
+                    try await localVolumeRecordKeeper?.save(records: records)
                 } catch {
-                    print("cannot save volume records: \(error)")
+                    print("cannot save local volume records: \(error)")
                 }
             }
         }
@@ -328,17 +378,17 @@ public final class ViewModel {
         }
     }
 
-    private func startTask() {
-        self.task = Task {
+    private func startLocalVolumeTask() {
+        self.localVolumeTask = Task {
             var isFirst = true
             // then iterate until we are cancelled
             while(true) {
                 do {
-                    await self.viewUpdate(records: try await manager.recordVolumeSizes())
+                    await self.localRecordViewUpdate(records: try await manager.recordLocalVolumeSizes())
 
                     try Task.checkCancellation()
                     if !isFirst {
-                        let seconds = await MainActor.run { preferences.pollIntervalSeconds }
+                        let seconds = await MainActor.run { preferences.localPollIntervalSeconds }
                         
                         // don't sleep the first time so the graph updates quicker
                         try await Task.sleep(nanoseconds: UInt64(seconds*1_000_000_000))
@@ -361,9 +411,9 @@ public final class ViewModel {
     func update(for volumeViewModel: VolumeViewModel? = nil) { 
         if let volumeViewModel {
             if volumeViewModel.isSelected {
-                self.preferences.volumesToShow.insert(volumeViewModel.volume.name)
+                self.preferences.localVolumesToShow.insert(volumeViewModel.volume.name)
             } else {
-                self.preferences.volumesToShow.remove(volumeViewModel.volume.name)
+                self.preferences.localVolumesToShow.remove(volumeViewModel.volume.name)
             }
         }
         savePreferences()

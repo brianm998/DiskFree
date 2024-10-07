@@ -37,8 +37,8 @@ struct SettingsView: View {
             
             HStack {
                 Text("Check Every")
-                TextField("\(viewModel.preferences.pollIntervalSeconds)",
-                          value: $viewModel.preferences.pollIntervalSeconds,
+                TextField("\(viewModel.preferences.localPollIntervalSeconds)",
+                          value: $viewModel.preferences.localPollIntervalSeconds,
                           format: .number)
                   .frame(maxWidth: 22)
                 Text("Seconds")

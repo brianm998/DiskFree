@@ -35,7 +35,8 @@ struct MainView: View {
               }
           }
           .onAppear {
-              viewModel.listVolumes()
+              viewModel.listLocalVolumes()
+              viewModel.listNetworkVolumes()
           }
           .padding()
     }

@@ -1,8 +1,8 @@
 import Foundation
 
-typealias VolumeRecords = [String:[SizeInfo]]
+typealias LocalVolumeRecords = [String:[SizeInfo]]
 
-func oldestTime(from records: VolumeRecords) -> TimeInterval {
+func oldestTime(from records: LocalVolumeRecords) -> TimeInterval {
     var ret: TimeInterval = 1000000000000000000
 
     for (volume, sizes) in records {

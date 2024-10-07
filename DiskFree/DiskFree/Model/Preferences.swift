@@ -2,7 +2,10 @@ import Foundation
 
 
 public struct Preferences: Codable, Sendable {
-    var volumesToShow: Set<String>
+    var localVolumesToShow: Set<String>
+    var localPollIntervalSeconds: Int
+    var networkVolumesToShow: Set<String>
+    var networkPollIntervalSeconds: Int
     var showSettingsView: Bool
     var chartType: ChartType
     var showFreeSpace: Bool
@@ -12,14 +15,16 @@ public struct Preferences: Codable, Sendable {
     var warningVoice: VoiceActor.Voice
     var errorVoice: VoiceActor.Voice
     var legendFontSize: CGFloat
-    var pollIntervalSeconds: Int
     var lowSpaceWarningThresholdGigs: UInt
     var lowSpaceErrorThresholdGigs: UInt // not used
     var maxDataAgeMinutes: TimeInterval
 
     init() {
         // defaults are set here
-        volumesToShow = []
+        localVolumesToShow = []
+        localPollIntervalSeconds = 4
+        networkVolumesToShow = []
+        networkPollIntervalSeconds = 30
         showSettingsView = false
         chartType = .combined
         showFreeSpace = true
@@ -29,7 +34,6 @@ public struct Preferences: Codable, Sendable {
         warningVoice = .Ellen // random
         errorVoice = .Ellen // random
         legendFontSize = 24
-        pollIntervalSeconds = 12
         lowSpaceWarningThresholdGigs = 100
         lowSpaceErrorThresholdGigs = 20
         maxDataAgeMinutes = 60 // one hour

@@ -28,21 +28,58 @@ import Foundation
  - show '/' instead of 'Macintosh HD - Data' for the root partition
  - allow toggle between showing important and Opportunistic Usage
  - find how to identify backup volumes
+
+
+
+ - plan for NAS
+
+   run `mount` to see what is there
+
+//floof@mammoth/mammoth on /System/Volumes/Data/mammoth (smbfs, nodev, nosuid, automounted, noowners, nobrowse, mounted by brian)
+//admin@goliath.local/branch on /System/Volumes/Data/mnt/branch (afpfs, nodev, nosuid, automounted, nobrowse, mounted by brian)
+//admin@goliath.local/trunk on /System/Volumes/Data/mnt/trunk (afpfs, nodev, nosuid, automounted, nobrowse, mounted by brian)
+//admin@colossus.local/tree on /System/Volumes/Data/mnt/tree (afpfs, nodev, nosuid, automounted, nobrowse, mounted by brian)
+//admin@beast.local/root on /System/Volumes/Data/mnt/root (afpfs, nodev, nosuid, automounted, nobrowse, mounted by brian)
+
+   any no longer active volumes will no longer show up on this list
+
+   have a different schedule for checking remote volumes
+   write out a different json file as well
+
+   each time, run `mount` to see what's there
+    - add any new network volumes
+    - make inactive any that are no longer there
+    - query any that are present with the df logic we used to use for local drives
  */
+
 public actor Manager: Sendable {
 
     private var volumes: [Volume] = []
-    private var dfActors: [Volume:ShellActor] = [:]
 
+    private var dfActors: [NetworkVolume:ShellActor] = [:] // used for network volumes 
     
-    private var volumeSizes: VolumeRecords = [:] // keyed by volume.name
+    private var localVolumeSizes: LocalVolumeRecords = [:] // keyed by volume.name
+    private var networkVolumeSizes: NetworkVolumeRecords = [:] // keyed by volume.localMount
 
-    public func loadStoredVolumeRecords() async {
+    public func loadStoredLocalVolumeRecords() async {
         do {
-            if let recordKeeper = VolumeRecordKeeper() {
+            if let recordKeeper = LocalVolumeRecordKeeper() {
                 let initialSizes = try await recordKeeper.loadRecords()
 
-                volumeSizes = initialSizes
+                localVolumeSizes = initialSizes
+                print("loaded stored records \(initialSizes.count)")
+            } 
+        } catch {
+            print("error loading stored records: \(error)")
+        }
+    }
+    
+    public func loadStoredNetworkVolumeRecords() async {
+        do {
+            if let recordKeeper = NetworkVolumeRecordKeeper() {
+                let initialSizes = try await recordKeeper.loadRecords()
+
+                networkVolumeSizes = initialSizes
                 print("loaded stored records \(initialSizes.count)")
             } 
         } catch {
@@ -59,6 +96,46 @@ public actor Manager: Sendable {
 
     func set(maxDataAgeMinutes: TimeInterval) {
         self.maxDataAgeMinutes = maxDataAgeMinutes
+    }
+
+    func readNetworkVolumes() async throws -> [NetworkVolume] {
+
+        /*
+//floof@mammoth/mammoth on /System/Volumes/Data/mammoth (smbfs, nodev, nosuid, automounted, noowners, nobrowse, mounted by brian)
+//admin@goliath.local/branch on /System/Volumes/Data/mnt/branch (afpfs, nodev, nosuid, automounted, nobrowse, mounted by brian)
+//admin@goliath.local/trunk on /System/Volumes/Data/mnt/trunk (afpfs, nodev, nosuid, automounted, nobrowse, mounted by brian)
+//admin@colossus.local/tree on /System/Volumes/Data/mnt/tree (afpfs, nodev, nosuid, automounted, nobrowse, mounted by brian)
+//admin@beast.local/root on /System/Volumes/Data/mnt/root (afpfs, nodev, nosuid, automounted, nobrowse, mounted by brian)
+         */
+        let syntheticConfigActor = ShellActor("mount", arguments: [])
+
+        let output = try await syntheticConfigActor.execute()
+
+        let outputLines = output.components(separatedBy: "\n")
+
+//        print("mount: \(output)")
+
+        var ret: [NetworkVolume] = []
+        
+        for line in outputLines {
+            if let networkVolume = NetworkVolume(from: line) {
+                ret.append(networkVolume)
+//                print("found \(networkVolume)")
+                /*
+
+                 next steps:
+
+                 - package the above values into a Sendable struct
+                 - add a parallel remote/local path for it
+                   - add new json file
+                   - use new polling interval
+                   - add separate ui, similar, but different
+                   - add remote / local global config options
+                   - 
+                 */
+            }            
+        }
+        return ret
     }
 
     func readRootSymlinks() async throws -> [String: String] { // /Volumes/op -> /op
@@ -92,7 +169,7 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
         let output = try await syntheticConfigActor.execute()
         let outputLines = output.components(separatedBy: "\n")
 
-        print("syntheticConfigOutput \(output)")
+//        print("syntheticConfigOutput \(output)")
         
         for line in outputLines {
             if let match = line.firstMatch(of: /([\/\w]+)\s+->\s+([\/\w]+)$/) {
@@ -107,7 +184,7 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
         return ret
     }
     
-    func listVolumes() async throws -> [Volume] {
+    func listLocalVolumes() async throws -> [Volume] {
 
         let rootSymlinks = try await readRootSymlinks()
         
@@ -178,7 +255,49 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
         return ret
     }
 
-    func recordVolumeSizes() async throws -> VolumeRecords {
+    func recordNetworkVolumeSizes() async throws -> NetworkVolumeRecords {
+        
+        // list mounts available now
+        let networkVolumes = try await readNetworkVolumes()
+        let timestamp = Date().timeIntervalSince1970
+
+        for volume in networkVolumes {
+            // run a df actor on them
+            print("FUCKING df'ing \(volume)")
+            if let size = try await sizeOf(volume: volume, at: timestamp) {
+                // add to list of network volume sizes
+
+                print("FUCKING got size \(size) for \(volume)")
+
+                if var existingList = networkVolumeSizes[volume.localMount] {
+                    existingList.append(size)
+                    networkVolumeSizes[volume.localMount] = existingList
+                } else {
+                    networkVolumeSizes[volume.localMount] = [size]
+                }
+            } else {
+                print("FUCKING DIDN'T GET SIZE for \(volume)")
+            }
+
+        }
+
+        // only keep newer entries 
+        let maxOldAge = Date().timeIntervalSince1970 - maxDataAgeMinutes*60 - 60
+        
+        for (volume, sizes) in networkVolumeSizes {
+            var newEnough: [DFSizeInfo] = []
+            for info in sizes {
+                if info.timestamp > maxOldAge {
+                    newEnough.append(info)
+                }
+            }
+            networkVolumeSizes[volume] = newEnough
+        }
+        
+        return networkVolumeSizes
+    }
+    
+    func recordLocalVolumeSizes() async throws -> LocalVolumeRecords {
         //print("record volume sizes volumes.count \(volumes.count)")
         // use the same timestamp for all of them,
         // instead of having them be very slightly different
@@ -186,15 +305,15 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
         for volume in volumes {
             //print("record size of \(volume.name)")
             if let sizeOfVolume = try self.sizeOf(volume: volume, at: timestamp) {
-                if var existingList = volumeSizes[volume.name] {
-                    //print("appending to volume list volumeSizes[\(volume.name)].count = \(volumeSizes[volume.name]?.count ?? -1)")
+                if var existingList = localVolumeSizes[volume.name] {
+                    //print("appending to volume list localVolumeSizes[\(volume.name)].count = \(localVolumeSizes[volume.name]?.count ?? -1)")
 
                     existingList.append(sizeOfVolume)  
-                    volumeSizes[volume.name] = existingList
-                    //print("appending to volume list volumeSizes[\(volume.name)].count = \(volumeSizes[volume.name]?.count ?? -1)")
+                    localVolumeSizes[volume.name] = existingList
+                    //print("appending to volume list localVolumeSizes[\(volume.name)].count = \(localVolumeSizes[volume.name]?.count ?? -1)")
                 } else {
-                    //print("NOT appending to volume list volumeSizes[\(volume.name)]")
-                    volumeSizes[volume.name] = [sizeOfVolume]
+                    //print("NOT appending to volume list localVolumeSizes[\(volume.name)]")
+                    localVolumeSizes[volume.name] = [sizeOfVolume]
                 }
             }
         }
@@ -202,34 +321,43 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
         // only keep newer entries 
         let maxOldAge = Date().timeIntervalSince1970 - maxDataAgeMinutes*60 - 60
         
-        for (volume, sizes) in volumeSizes {
+        for (volume, sizes) in localVolumeSizes {
             var newEnough: [SizeInfo] = []
             for info in sizes {
                 if info.timestamp > maxOldAge {
                     newEnough.append(info)
                 }
             }
-            volumeSizes[volume] = newEnough
+            localVolumeSizes[volume] = newEnough
         }
         
-        return volumeSizes
+        return localVolumeSizes
     }
 
 
+    // size of local volume
     func sizeOf(volume: Volume, at timestamp: TimeInterval) throws -> SizeInfo? {
         try SizeInfo(for: volume.mountPoint, timestamp: timestamp)
     }
     
-    func dfSizeOf(volume: Volume, at timestamp: TimeInterval) async throws -> DFSizeInfo? {
+    // size of network volume
+    func sizeOf(volume: NetworkVolume, at timestamp: TimeInterval) async throws -> DFSizeInfo? {
         if dfActors[volume] == nil {
-            dfActors[volume] = ShellActor("df", arguments: ["-k", "'\(volume.mountPoint)'"])
+            dfActors[volume] = ShellActor("df", arguments: ["-k", "'\(volume.localMount)'"])
         }
         guard let duActor = dfActors[volume]
-        else { throw "no df actor found for volume \(volume.name)" }
-
+        else { throw "no df actor found for volume \(volume.localMount)" }
+        
         let output = try await duActor.execute()
 
-        return DFSizeInfo(dfOutput: output, timestamp: timestamp)
+        let outputLines = output.components(separatedBy: "\n") 
+        for line in outputLines {
+            if let ret = DFSizeInfo(dfOutput: output, timestamp: timestamp) {
+                return ret
+            }
+        }
+
+        return nil
     }
 }
 
