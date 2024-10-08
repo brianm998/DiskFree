@@ -17,6 +17,10 @@ public final class ViewModel {
     var localVolumes: [VolumeViewModel] = []
     var networkVolumes: [VolumeViewModel] = []
 
+    var allVolumes: [VolumeViewModel] {
+        localVolumes + networkVolumes
+    }
+    
     var preferences = Preferences()
     
     var warningLocalVolumes: Set<String> = []
@@ -49,7 +53,7 @@ public final class ViewModel {
     
     var newLocalVolumeSizes: LocalVolumeRecords = [:]
 
-    var newNetworkVolumeSizes: NetworkVolumeRecords = [:] // XXX use this
+    var newNetworkVolumeSizes: NetworkVolumeRecords = [:]
 
     func decreaseFontSize() {
         if preferences.legendFontSize > 4 { // XXX hardcoded minimum
@@ -66,7 +70,7 @@ public final class ViewModel {
     var localVolumesSortedByEmptyFirst: [VolumeViewModel] {
         localVolumes.sorted { (a: VolumeViewModel, b: VolumeViewModel) in
             a.lastFreeSize() > b.lastFreeSize()
-        }
+        } + networkVolumes
     }
 
     func listNetworkVolumes() {
