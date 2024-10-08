@@ -13,6 +13,7 @@ import Foundation
    - allow changing it by dragging it
  - create app icon
  - add github link in app
+ - support multiple windows better, i.e. separate preferences for each
 
  - look into this:
    diskutil info -plist /

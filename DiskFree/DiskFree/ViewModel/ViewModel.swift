@@ -14,8 +14,8 @@ public final class ViewModel {
      https://forums.developer.apple.com/forums/thread/735416
      
      */
-    var localVolumes: [NetworkVolumeViewModel] = []
-    var networkVolumes: [NetworkVolumeViewModel] = []
+    var localVolumes: [VolumeViewModel] = []
+    var networkVolumes: [VolumeViewModel] = []
 
     var preferences = Preferences()
     
@@ -63,8 +63,8 @@ public final class ViewModel {
         savePreferences()
     }
 
-    var localVolumesSortedByEmptyFirst: [NetworkVolumeViewModel] {
-        localVolumes.sorted { (a: NetworkVolumeViewModel, b: NetworkVolumeViewModel) in
+    var localVolumesSortedByEmptyFirst: [VolumeViewModel] {
+        localVolumes.sorted { (a: VolumeViewModel, b: VolumeViewModel) in
             a.lastFreeSize() > b.lastFreeSize()
         }
     }
@@ -104,7 +104,7 @@ public final class ViewModel {
                         }
 
                         if isNew {
-                            let viewModel = NetworkVolumeViewModel(volume: newVolume,
+                            let viewModel = VolumeViewModel(volume: newVolume,
                                                                    color: .purple,
                                                                    preferences: preferences)
                             if let sizes = sizeRecords[newVolume.name] {
@@ -141,7 +141,7 @@ public final class ViewModel {
                 await MainActor.run {
                     var colorIndex = 0
                     self.localVolumes = volumes.map {
-                        let ret = NetworkVolumeViewModel(volume: $0,
+                        let ret = VolumeViewModel(volume: $0,
                                                   color: lineColors[colorIndex],
                                                   preferences: preferences)
                         colorIndex += 1
@@ -235,7 +235,7 @@ public final class ViewModel {
 
     private func potentialSizeAudio(for oldSize: SizeInfo?,
                                     and newSize: SizeInfo,
-                                    of volume: NetworkVolumeViewModel,
+                                    of volume: VolumeViewModel,
                                     warningThreshold: UInt,
                                     badText: String,
                                     goodText: String,
@@ -414,8 +414,8 @@ public final class ViewModel {
             }
             
             var colorIndex = 0
-            var lastSelectedViewModel: NetworkVolumeViewModel? = nil
-            var firstSelectedViewModel: NetworkVolumeViewModel? = nil
+            var lastSelectedViewModel: VolumeViewModel? = nil
+            var firstSelectedViewModel: VolumeViewModel? = nil
             for volumeViewModel in volumesEmptyFirst {
                 volumeViewModel.isMostFull = false
                 volumeViewModel.isMostEmpty = false
@@ -482,7 +482,7 @@ public final class ViewModel {
         savePreferences()
     }
 
-    func update(for volumeViewModel: NetworkVolumeViewModel? = nil) { 
+    func update(for volumeViewModel: VolumeViewModel? = nil) { 
         if let volumeViewModel {
             if volumeViewModel.isSelected {
                 self.preferences.localVolumesToShow.insert(volumeViewModel.volume.name)
