@@ -34,7 +34,13 @@ public struct NetworkVolume: Sendable,
             self.username = String(match.1)
             self.remoteHost = String(match.2)
             self.remotePath = String(match.3)
-            self.localMount = String(match.4) // remove /System/Volumes/Data ?
+            let localMount = String(match.4) // remove /System/Volumes/Data ?
+            let undesiredStartString = "/System/Volumes/Data"
+            if localMount.starts(with: undesiredStartString) {
+                self.localMount = String(localMount.dropFirst(undesiredStartString.count))
+            } else {
+                self.localMount = localMount
+            }
             self.type = String(match.5)
         } else {
             // no match on this line
