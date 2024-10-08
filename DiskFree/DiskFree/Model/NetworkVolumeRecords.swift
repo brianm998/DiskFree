@@ -1,4 +1,5 @@
 import Foundation
 
-typealias NetworkVolumeRecords = [String:[DFSizeInfo]]
+public typealias NetworkVolumeRecords = [String:[DFSizeInfo]]
 
+//public func volumes(from records: NetworkVolumeRecords) -> [String] { [String](records.keys) }

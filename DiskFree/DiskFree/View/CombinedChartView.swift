@@ -136,7 +136,14 @@ struct CombinedChartView: View {
         Chart {
 //            let lineWidth = 6
 //            let dotSize = 24//lineWidth*4
-          ForEach(self.viewModel.localVolumes) { volumeView in
+            /*
+
+             try exposing a list of volume view protocols from the view model,
+             so we can both network and local volumes use the same view code,
+             right now it's copied for each :(
+             
+             */
+            ForEach(self.viewModel.localVolumes) { volumeView in
                 if volumeView.isSelected {
                     if viewModel.preferences.showFreeSpace {
                         ForEach(volumeView.sizes) { sizeData in
@@ -154,21 +161,6 @@ struct CombinedChartView: View {
                                                      miterLimit: 0,
                                                      dash: [12],
                                                      dashPhase: 0))
-
-                            if false && volumeView.isMostFull {
-                                // bottom red area mark doesn't look good :(
-                                AreaMark(
-                                  x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
-			          y: .value("free", sizeData.gigsFree),
-                                  series: .value(volumeView.volume.name,
-                                                 "\(volumeView.volume.name)1"),
-                                  stacking: .unstacked
-			        )
-			          .lineStyle(StrokeStyle(lineWidth: 2))
-			          .foregroundStyle(self.gradient(with: volumeView.lineColor))
-                                  .interpolationMethod(.cardinal)
-
-                            }
                         }
                         if volumeView.sizes.count > 0 {
                             let sizeData = volumeView.sizes[0]
@@ -223,20 +215,91 @@ struct CombinedChartView: View {
                             )
                               .interpolationMethod(.catmullRom)
 			      .foregroundStyle(.red)
-                        }/*
-                        if let sizeData = volumeView.lastSize {
+                        }
+                    }
+                }
+            }
+
+            // NETWORK STUFF HERE
+
+            ForEach(self.viewModel.networkVolumes) { volumeView in
+                if volumeView.isSelected {
+                    if viewModel.preferences.showFreeSpace {
+                        let _ = print("NETWORK VOLUME IS SELETED \(volumeView) \(volumeView.sizes.count)")
+                        ForEach(volumeView.sizes) { sizeData in
+                            LineMark(
+                              x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
+		              y: .value("Gigabytes Free", sizeData.gigsFree),
+                              series: .value(volumeView.volume.localMount,
+                                             "\(volumeView.volume.localMount)1")
+                            )
+                              .interpolationMethod(.catmullRom)
+                              .foregroundStyle(volumeView.lineColor)
+                              .lineStyle(StrokeStyle(lineWidth: 4,
+                                                     lineCap: .round, // .butt .square
+                                                     lineJoin: .round, //.miter .bevel
+                                                     miterLimit: 0,
+                                                     dash: [12],
+                                                     dashPhase: 0))
+                        }
+                        if volumeView.sizes.count > 0 {
+                            let sizeData = volumeView.sizes[0]
                             PointMark(
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
-		              y: .value("Gigabytes Used", sizeData.gigsUsed)
+		              y: .value("Gigabytes Free", sizeData.gigsFree)
                             )
-                              .symbolSize(2)
-			      .foregroundStyle(.mint)
-                              .annotation(position: .topLeading, alignment: .bottomLeading) {
-                                  //Toggle(isOn: volumeView.isSelected) {
-                                  Text(volumeView.chartUsedLineText)
-                                  //}
+                              .symbolSize(16)
+                              .foregroundStyle(volumeView.lineColor)
+
+                              .annotation(position: .leading, alignment: .bottom) {
+                                  Text(volumeView.volume.localMount)
+                                    .font(.system(size: 22))
+                                    .foregroundStyle(volumeView.lineColor)
+                                    .frame(maxWidth: 50)
+                                    .blinking(if: volumeView.showLowSpaceWarning,
+                                                duration: 0.4)
                               } 
-                        }*/
+                        }
+                        if let sizeData = volumeView.lastSize {
+
+                            if volumeView.isMostFull {
+                                PointMark(
+                                  x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
+		                  y: .value("Gigabytes Free", sizeData.gigsFree)
+                                )
+                                  .symbolSize(16)
+                                  .foregroundStyle(volumeView.lineColor)
+                                  .annotation(position: .leading, alignment: .top) {
+                                      Text(volumeView.volume.localMount)
+                                        .font(.system(size: 22))
+                                        .foregroundStyle(volumeView.weightAdjustedColor)
+                                        .blinking(if: volumeView.showLowSpaceWarning,
+                                                    duration: 0.4)
+                                  } 
+
+                            } else {
+                                PointMark(
+                                  x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
+		                  y: .value("Gigabytes Free", sizeData.gigsFree)
+                                )
+                                  .symbolSize(16)
+                                  .foregroundStyle(volumeView.lineColor)
+                            }
+
+                            }
+                    }
+
+                    if viewModel.preferences.showUsedSpace {
+                        ForEach(volumeView.sizes) { sizeData in
+                            LineMark(
+                              x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
+		              y: .value("Gigabytes Used", sizeData.gigsUsed),
+                              series: .value(volumeView.volume.localMount,
+                                             "\(volumeView.volume.localMount)2")
+                            )
+                              .interpolationMethod(.catmullRom)
+			      .foregroundStyle(.red)
+                        }
                     }
                 }
             }
@@ -244,7 +307,6 @@ struct CombinedChartView: View {
           .chartXAxis {
               AxisMarks(preset: .aligned) // XXX doesn't help :(
           }
-
           .chartYScale(domain: viewModel.chartRange(showFree: viewModel.preferences.showFreeSpace,
                                                     showUsed: viewModel.preferences.showUsedSpace))
           .chartYAxisLabel("Gigabytes")

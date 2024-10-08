@@ -3,7 +3,8 @@ import Foundation
 public struct NetworkVolume: Sendable,
                              Codable,
                              Identifiable,
-                             Hashable
+                             Hashable,
+                             Comparable
 {
     public let username: String
     public let remoteHost: String
@@ -47,6 +48,10 @@ public struct NetworkVolume: Sendable,
         lhs.type == rhs.type
     }
 
+  public static func < (lhs: NetworkVolume, rhs: NetworkVolume) -> Bool {
+      lhs.localMount < rhs.localMount
+  }
+  
   public func hash(into hasher: inout Hasher) {
         hasher.combine(username)
         hasher.combine(remoteHost)

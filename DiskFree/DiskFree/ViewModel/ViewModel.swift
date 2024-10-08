@@ -15,6 +15,7 @@ public final class ViewModel {
      
      */
     var localVolumes: [LocalVolumeViewModel] = []
+    var networkVolumes: [NetworkVolumeViewModel] = []
 
     var preferences = Preferences()
     
@@ -71,14 +72,48 @@ public final class ViewModel {
     func listNetworkVolumes() {
         self.networkVolumeTask = Task {
 
-            await self.manager.loadStoredNetworkVolumeRecords()
-            
+            let storedRecords = await self.manager.loadStoredNetworkVolumeRecords() 
+
             var isFirst = true
             // then iterate until we are cancelled
             while(true) {
                 do {
-                    await self.networkRecordViewUpdate(records: try await manager.recordNetworkVolumeSizes())
+                    let (newNetworkVolumes, sizeRecords) =
+                      try await manager.recordNetworkVolumeSizes()
+                    
+                    await self.networkRecordViewUpdate(volumes: newNetworkVolumes,
+                                                       records: sizeRecords)
 
+                    /*
+                     reconcile the existing network volumes with new ones
+                     create view models for new network volumes
+                     */
+
+                    for newVolume in newNetworkVolumes {
+                        var isNew = true
+                        for volumeView in networkVolumes {
+                            if volumeView.volume == newVolume {
+
+                                // set sizes here
+                                if let sizes = sizeRecords[volumeView.volume.localMount] {
+                                    volumeView.sizes = sizes
+                                }
+                                isNew = false
+                                break
+                            }
+                        }
+
+                        if isNew {
+                            let viewModel = NetworkVolumeViewModel(volume: newVolume,
+                                                                   color: .purple,
+                                                                   preferences: preferences)
+                            if let sizes = sizeRecords[newVolume.localMount] {
+                                viewModel.sizes = sizes
+                            }
+                            self.networkVolumes.append(viewModel)
+                        }
+                    }
+                  
                     try Task.checkCancellation()
                     if !isFirst {
                         let seconds = await MainActor.run { preferences.networkPollIntervalSeconds }
@@ -144,10 +179,18 @@ public final class ViewModel {
     
     private func minGigs(showFree: Bool, showUsed: Bool) -> UInt {
         var ret = UInt.max<<8
-        if localVolumes.count == 0 {
+        if localVolumes.count == 0,
+           networkVolumes.count == 0
+        {
             return 0
         }
         for volumeViewModel in localVolumes {
+            if volumeViewModel.isSelected {
+                let maxGigs = volumeViewModel.minGigs(showFree: showFree, showUsed: showUsed)
+                if maxGigs < ret { ret = maxGigs }
+            }
+        }
+        for volumeViewModel in networkVolumes {
             if volumeViewModel.isSelected {
                 let maxGigs = volumeViewModel.minGigs(showFree: showFree, showUsed: showUsed)
                 if maxGigs < ret { ret = maxGigs }
@@ -158,10 +201,18 @@ public final class ViewModel {
 
     private func maxGigs(showFree: Bool, showUsed: Bool) -> UInt {
         var ret: UInt = 0
-        if localVolumes.count == 0 {
+        if localVolumes.count == 0,
+           networkVolumes.count == 0
+        {
             return UInt.max<<8
         }
         for volumeViewModel in localVolumes {
+            if volumeViewModel.isSelected {
+                let maxGigs = volumeViewModel.maxGigs(showFree: showFree, showUsed: showUsed)
+                if maxGigs > ret { ret = maxGigs }
+            }
+        }
+        for volumeViewModel in networkVolumes {
             if volumeViewModel.isSelected {
                 let maxGigs = volumeViewModel.maxGigs(showFree: showFree, showUsed: showUsed)
                 if maxGigs > ret { ret = maxGigs }
@@ -252,7 +303,8 @@ public final class ViewModel {
 
      */
 
-    private func networkRecordViewUpdate(records: NetworkVolumeRecords,
+    private func networkRecordViewUpdate(volumes: [NetworkVolume],
+                                         records: NetworkVolumeRecords,
                                          shouldSave: Bool = true) async
     {
         if shouldSave {
@@ -266,10 +318,26 @@ public final class ViewModel {
             }
         }
 
+
+        await MainActor.run {
+            self.newNetworkVolumeSizes = records
+
+        }
+        
         // XXX update the UI
+
+        /*
+         NEXT, populate the 
+         networkVolumes set
+
+         we may not have exactly the same list on each iteration, so add
+         any that are new to networkVolumes
+
+         then update the view model with new network info,
+         like the local view update below
+         */
     }
 
-    
     private func localRecordViewUpdate(records: LocalVolumeRecords,
                                        shouldSave: Bool = true) async
     {
@@ -408,6 +476,14 @@ public final class ViewModel {
       Task {
        await self.manager.set(maxDataAgeMinutes: preferences.maxDataAgeMinutes)
       }
+    }
+    
+    func update() {
+        savePreferences()
+    }
+
+    func update(for volumeViewModel: NetworkVolumeViewModel? = nil) {
+        // XXX implement this
     }
     
     func update(for volumeViewModel: LocalVolumeViewModel? = nil) { 

@@ -59,10 +59,33 @@ struct SettingsView: View {
         }
     }    
 
-    var diskSettings: some View {
+    var networkVolumeSettings: some View {
         @Bindable var viewModel = viewModel
         return VStack(alignment: .leading) {
-            Text("Disks")
+            Text("Network")
+              .font(.system(size: 18))
+              .foregroundColor(.gray)
+            
+            Text("DiskFree can show any of these")
+              .font(.system(size: 10))
+              .foregroundColor(.gray)
+
+
+            ScrollView {
+                VStack(alignment: .leading) {
+                    // XXX sort by something else than this VVV later
+                    ForEach($viewModel.networkVolumes) { volumeView in
+                        NetworkVolumeChoiceItemView(volumeViewModel: volumeView)
+                    }
+                }
+            }
+        }
+    }
+    
+    var localVolumeSettings: some View {
+        @Bindable var viewModel = viewModel
+        return VStack(alignment: .leading) {
+            Text("Local")
               .font(.system(size: 18))
               .foregroundColor(.gray)
             
@@ -73,7 +96,7 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading) {
                     ForEach($viewModel.localVolumes) { volumeView in
-                        VolumeChoiceItemView(volumeViewModel: volumeView)
+                        LocalVolumeChoiceItemView(volumeViewModel: volumeView)
                     }
                 }
             }
@@ -173,7 +196,8 @@ struct SettingsView: View {
                 Spacer()
                 HStack(alignment: .top) {
                     generalSettings
-                    diskSettings
+                    localVolumeSettings
+                    networkVolumeSettings
                     audioSettings
                 }
                   .frame(minWidth: 600)

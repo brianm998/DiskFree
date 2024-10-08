@@ -67,17 +67,20 @@ public actor Manager: Sendable {
         }
     }
     
-    public func loadStoredNetworkVolumeRecords() async {
+    public func loadStoredNetworkVolumeRecords() async -> NetworkVolumeRecords? {
         do {
             if let recordKeeper = NetworkVolumeRecordKeeper() {
                 let initialSizes = try await recordKeeper.loadRecords()
 
                 networkVolumeSizes = initialSizes
                 print("loaded stored records \(initialSizes.count)")
+
+                return initialSizes
             } 
         } catch {
             print("error loading stored records: \(error)")
         }
+        return nil
     }
     
     // data older than this is discarded
@@ -120,8 +123,8 @@ public actor Manager: Sendable {
 
                  - package the above values into a Sendable struct
                  - add a parallel remote/local path for it
-                   - add new json file
-                   - use new polling interval
+                   * add new json file
+                   * use new polling interval
                    - add separate ui, similar, but different
                    - add remote / local global config options
                    - 
@@ -248,7 +251,7 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
         return ret
     }
 
-    func recordNetworkVolumeSizes() async throws -> NetworkVolumeRecords {
+    func recordNetworkVolumeSizes() async throws -> ([NetworkVolume], NetworkVolumeRecords) {
         
         // list mounts available now
         let networkVolumes = try await readNetworkVolumes()
@@ -287,7 +290,7 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
             networkVolumeSizes[volume] = newEnough
         }
         
-        return networkVolumeSizes
+        return (networkVolumes, networkVolumeSizes)
     }
     
     func recordLocalVolumeSizes() async throws -> LocalVolumeRecords {

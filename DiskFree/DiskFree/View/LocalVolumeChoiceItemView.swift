@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct VolumeChoiceItemView: View {
+struct LocalVolumeChoiceItemView: View {
     @Environment(ViewModel.self) var viewModel: ViewModel
     @Binding var volumeViewModel: LocalVolumeViewModel
     
