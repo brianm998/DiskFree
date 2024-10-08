@@ -95,7 +95,7 @@ public final class ViewModel {
                             if volumeView.volume == newVolume {
 
                                 // set sizes here
-                                if let sizes = sizeRecords[volumeView.volume.localMount] {
+                                if let sizes = sizeRecords[volumeView.volume.name] {
                                     volumeView.sizes = sizes
                                 }
                                 isNew = false
@@ -107,7 +107,7 @@ public final class ViewModel {
                             let viewModel = NetworkVolumeViewModel(volume: newVolume,
                                                                    color: .purple,
                                                                    preferences: preferences)
-                            if let sizes = sizeRecords[newVolume.localMount] {
+                            if let sizes = sizeRecords[newVolume.name] {
                                 viewModel.sizes = sizes
                             }
                             self.networkVolumes.append(viewModel)

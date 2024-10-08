@@ -230,8 +230,8 @@ struct CombinedChartView: View {
                             LineMark(
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
 		              y: .value("Gigabytes Free", sizeData.gigsFree),
-                              series: .value(volumeView.volume.localMount,
-                                             "\(volumeView.volume.localMount)1")
+                              series: .value(volumeView.volume.name,
+                                             "\(volumeView.volume.name)1")
                             )
                               .interpolationMethod(.catmullRom)
                               .foregroundStyle(volumeView.lineColor)
@@ -252,7 +252,7 @@ struct CombinedChartView: View {
                               .foregroundStyle(volumeView.lineColor)
 
                               .annotation(position: .leading, alignment: .bottom) {
-                                  Text(volumeView.volume.localMount)
+                                  Text(volumeView.volume.name)
                                     .font(.system(size: 22))
                                     .foregroundStyle(volumeView.lineColor)
                                     .frame(maxWidth: 50)
@@ -270,7 +270,7 @@ struct CombinedChartView: View {
                                   .symbolSize(16)
                                   .foregroundStyle(volumeView.lineColor)
                                   .annotation(position: .leading, alignment: .top) {
-                                      Text(volumeView.volume.localMount)
+                                      Text(volumeView.volume.name)
                                         .font(.system(size: 22))
                                         .foregroundStyle(volumeView.weightAdjustedColor)
                                         .blinking(if: volumeView.showLowSpaceWarning,
@@ -294,8 +294,8 @@ struct CombinedChartView: View {
                             LineMark(
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
 		              y: .value("Gigabytes Used", sizeData.gigsUsed),
-                              series: .value(volumeView.volume.localMount,
-                                             "\(volumeView.volume.localMount)2")
+                              series: .value(volumeView.volume.name,
+                                             "\(volumeView.volume.name)2")
                             )
                               .interpolationMethod(.catmullRom)
 			      .foregroundStyle(.red)

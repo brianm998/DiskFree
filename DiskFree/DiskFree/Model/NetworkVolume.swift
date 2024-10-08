@@ -13,6 +13,8 @@ public struct NetworkVolume: Sendable,
     public let type: String
     public let id = UUID()
 
+    public var name: String { localMount }
+
     public init(username: String,
                 remoteHost: String,
                 remotePath: String,

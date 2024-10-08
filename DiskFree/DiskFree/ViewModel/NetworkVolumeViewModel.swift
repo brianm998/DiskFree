@@ -1,14 +1,75 @@
 import SwiftUI
 import Combine
 
+
+enum VolumeType: Equatable,
+                 Comparable,
+                 Hashable
+{
+    case network(NetworkVolume)
+    case local(LocalVolume)
+
+    // XXX expose switched vars here for info about this crap
+
+    var name: String {
+        switch self {
+        case .network(let volume):
+            return volume.localMount
+        case .local(let volume):
+            return volume.name
+        }
+    }
+
+    static func == (lhs: VolumeType, rhs: NetworkVolume) -> Bool {
+        switch lhs {
+        case .network(let lhsVolume):
+            return lhsVolume == rhs
+        case .local(let lhsVolume):
+            return false
+        }
+    }
+
+    static func == (lhs: VolumeType, rhs: VolumeType) -> Bool {
+        switch lhs {
+        case .network(let lhsVolume):
+            switch rhs {
+            case .network(let rhsVolume):
+                return lhsVolume == rhsVolume
+            case .local(let rhsVolume):
+                return false
+            }
+        case .local(let lhsVolume):
+            switch rhs {
+            case .network(let rhsVolume):
+                return false
+            case .local(let rhsVolume):
+                return lhsVolume == rhsVolume
+            }
+        }
+    }
+
+    static func < (lhs: VolumeType, rhs: VolumeType) -> Bool {
+        lhs.name < rhs.name
+    }
+
+    func hash(into hasher: inout Hasher) {
+        switch self {
+        case .network(let volume):
+            hasher.combine(volume)
+        case .local(let volume):
+            hasher.combine(volume)
+        }
+    }    
+}
+
 @Observable
 class NetworkVolumeViewModel: Identifiable,
                               Hashable,
                               CustomStringConvertible,
                               Comparable
 {
-    var volume: NetworkVolume   // XXX make protocol for this that matches LocalVolume
-    var lastSize: SizeInfo?   // XXX make protocol for this that matches SizeInfo
+    var volume: VolumeType
+    var lastSize: SizeInfo? 
     public var isSelected = true
     var lineColor: Color
     var chartFreeLineText: String {
@@ -169,7 +230,7 @@ class NetworkVolumeViewModel: Identifiable,
     }
     
     var description: String {
-        "\(volume.localMount) \(chartFreeLineText)"
+        "\(volume.name) \(chartFreeLineText)"
     }
 
     var weightAdjustedColor: Color {
@@ -186,7 +247,15 @@ class NetworkVolumeViewModel: Identifiable,
         lhs.volume == rhs.volume
     }
 
-    public init(volume: NetworkVolume, color: Color, preferences: Preferences) {
+  public convenience init(volume: NetworkVolume, color: Color, preferences: Preferences) {
+        self.init(volume: .network(volume), color: color, preferences: preferences)
+    }
+
+  public convenience init(volume: LocalVolume, color: Color, preferences: Preferences) {
+        self.init(volume: .local(volume), color: color, preferences: preferences)
+    }
+    
+    public init(volume: VolumeType, color: Color, preferences: Preferences) {
         self.volume = volume
         self.lineColor = color
         self.preferences = preferences
@@ -236,9 +305,9 @@ class NetworkVolumeViewModel: Identifiable,
 
     var chartUsedLineText: String {
         if let lastSize = self.lastSize {
-            return "\(self.volume.localMount) - \(lastSize.usedSizeInt) used"
+            return "\(self.volume.name) - \(lastSize.usedSizeInt) used"
         } else {
-            return self.volume.localMount
+            return self.volume.name
         }
     }
     
@@ -285,9 +354,9 @@ class NetworkVolumeViewModel: Identifiable,
     public var helpText: String {
         var ret =  ""
         if let lastSize = self.lastSize {
-            ret = "\(lastSize.totalSize) Volume \(volume.localMount)\n is mounted on \(volume.localMount)"
+            ret = "\(lastSize.totalSize) Volume \(volume.name)\n is mounted on \(volume.name)"
         } else {
-            ret = "Volume \(volume.localMount)"
+            ret = "Volume \(volume.name)"
         }
         return ret
     }

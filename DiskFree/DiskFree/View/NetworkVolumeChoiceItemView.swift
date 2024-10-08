@@ -8,9 +8,9 @@ struct NetworkVolumeChoiceItemView: View {
         HStack {
             Toggle(isOn: $volumeViewModel.isSelected) {
                 if let lastSize = volumeViewModel.lastSize {
-                    Text("\(lastSize.totalSize) \(volumeViewModel.volume.localMount)")
+                    Text("\(lastSize.totalSize) \(volumeViewModel.volume.name)")
                 } else {
-                    Text("\(volumeViewModel.volume.localMount)")
+                    Text("\(volumeViewModel.volume.name)")
                 }
             }
               .toggleStyle(.checkbox)
