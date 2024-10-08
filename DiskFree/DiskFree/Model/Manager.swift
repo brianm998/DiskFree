@@ -281,7 +281,7 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
         let maxOldAge = Date().timeIntervalSince1970 - maxDataAgeMinutes*60 - 60
         
         for (volume, sizes) in networkVolumeSizes {
-            var newEnough: [DFSizeInfo] = []
+            var newEnough: [SizeInfo] = []
             for info in sizes {
                 if info.timestamp > maxOldAge {
                     newEnough.append(info)
@@ -337,7 +337,7 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
     }
     
     // size of network volume
-    func sizeOf(volume: NetworkVolume, at timestamp: TimeInterval) async throws -> DFSizeInfo? {
+    func sizeOf(volume: NetworkVolume, at timestamp: TimeInterval) async throws -> SizeInfo? {
         if dfActors[volume] == nil {
             dfActors[volume] = ShellActor("df", arguments: ["-k", "'\(volume.localMount)'"])
         }
@@ -348,7 +348,7 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
 
         let outputLines = output.components(separatedBy: "\n") 
         for line in outputLines {
-            if let ret = DFSizeInfo(dfOutput: output, timestamp: timestamp) {
+            if let ret = SizeInfo(dfOutput: output, timestamp: timestamp) {
                 return ret
             }
         }

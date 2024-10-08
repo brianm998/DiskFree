@@ -8,7 +8,7 @@ class NetworkVolumeViewModel: Identifiable,
                               Comparable
 {
     var volume: NetworkVolume   // XXX make protocol for this that matches LocalVolume
-    var lastSize: DFSizeInfo?   // XXX make protocol for this that matches SizeInfo
+    var lastSize: SizeInfo?   // XXX make protocol for this that matches SizeInfo
     public var isSelected = true
     var lineColor: Color
     var chartFreeLineText: String {
@@ -28,13 +28,13 @@ class NetworkVolumeViewModel: Identifiable,
         lhs.volume < rhs.volume
     }
   
-    func changeAmount(for old: DFSizeInfo, and new: DFSizeInfo) -> Double { // kb/sed
+    func changeAmount(for old: SizeInfo, and new: SizeInfo) -> Double { // kb/sed
         let diffInKB = abs(Int(new.freeSize_k) - Int(old.freeSize_k))
         let timeDiff = abs(new.timestamp - old.timestamp)
         return Double(diffInKB)/timeDiff
     }
     
-    func changeString(for old: DFSizeInfo, and new: DFSizeInfo) -> String {
+    func changeString(for old: SizeInfo, and new: SizeInfo) -> String {
 
         let kbPerSec = changeAmount(for: old, and: new)
         
@@ -84,7 +84,7 @@ class NetworkVolumeViewModel: Identifiable,
         }
     }
     
-    func changeString2(for old: DFSizeInfo, and new: DFSizeInfo) -> String {
+    func changeString2(for old: SizeInfo, and new: SizeInfo) -> String {
         let diffInKB = abs(Int(new.freeSize_k) - Int(old.freeSize_k))
         let timeDiff = abs(new.timestamp - old.timestamp)
         let kbPerSec = Double(diffInKB)/timeDiff
@@ -156,7 +156,7 @@ class NetworkVolumeViewModel: Identifiable,
         case equal
     }
     
-    public var sizes: [DFSizeInfo] = []
+    public var sizes: [SizeInfo] = []
     
     var id = UUID()
 

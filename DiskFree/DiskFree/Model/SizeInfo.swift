@@ -11,11 +11,12 @@ public struct SizeInfo: Sendable,
                         Codable
 {
     // all sizes in bytes
-    let importantCapacity: Int
+    let importantCapacity: Int  // size that's really available
+
+    // size that's only available if the os doesn't cleaup it's swap and such
     let opportunisticCapacity: Int
-    let availableCapacity: Int
+    //let availableCapacity: Int
     let totalCapacity: Int
-    let path: String
     
     let timestamp: TimeInterval
 
@@ -23,13 +24,44 @@ public struct SizeInfo: Sendable,
 
     public var freeSize_k: UInt { UInt(importantCapacity/1024) }
     public var totalSize_k: UInt { UInt(totalCapacity/1024) }
-    
+
+    // size info from df output
+    init?(dfOutput: String, timestamp: TimeInterval) {
+        /*
+         expects this kind of string:
+           
+Filesystem    1024-blocks       Used Available Capacity iused      ifree %iused  Mounted on
+/dev/disk14s2  3906870272 3582336656 324533616    92%   97180 4294870099    0%   /Volumes/op
+//admin@beast.local/root  5809283456 642511216 5166772240    12% 160627802 1291693060   11%   /System/Volumes/Data/mnt/root
+         */
+
+        // should match the beginning of the second line
+        let regex = /^\/\/?[\/@\w.]+\s+(\d+)\s+(\d+)\s+(\d+)/
+
+        let lines = dfOutput.components(separatedBy: "\n")
+        if lines.count > 1,
+           let match = lines[1].firstMatch(of: regex),
+           let match1 = Int(match.1),
+           let match2 = Int(match.2),
+           let match3 = Int(match.3)
+        {
+            self.totalCapacity = match1*1024
+            //self.usedSize_k = match2
+            self.opportunisticCapacity = match3*1024
+            self.importantCapacity = match3*1024
+            self.timestamp = timestamp
+        } else {
+            return nil
+        }
+    }
+
+    // size info for local volume at file system path
     init(for path: String, timestamp: TimeInterval) throws {
         let fileURL = URL(fileURLWithPath: path)
 
         let keys: Set<URLResourceKey> =
           [.volumeTotalCapacityKey,
-           .volumeAvailableCapacityKey,
+           //.volumeAvailableCapacityKey,
            .volumeAvailableCapacityForImportantUsageKey,
            .volumeAvailableCapacityForOpportunisticUsageKey]
 
@@ -38,14 +70,13 @@ public struct SizeInfo: Sendable,
 
         if let importantCapacity = values.volumeAvailableCapacityForImportantUsage,
            let opportunisticCapacity = values.volumeAvailableCapacityForOpportunisticUsage,
-           let availableCapacity = values.volumeAvailableCapacity,
+           //let availableCapacity = values.volumeAvailableCapacity,
            let totalCapacity = values.volumeTotalCapacity
         {
             self.importantCapacity = Int(importantCapacity)
             self.opportunisticCapacity = Int(opportunisticCapacity)
-            self.availableCapacity = availableCapacity
+            //self.availableCapacity = availableCapacity
             self.totalCapacity = totalCapacity
-            self.path = path
             self.timestamp = timestamp
             print("self \(self)")
         } else {
@@ -57,9 +88,8 @@ public struct SizeInfo: Sendable,
         lhs.timestamp == rhs.timestamp &&
         lhs.importantCapacity == rhs.importantCapacity &&
         lhs.opportunisticCapacity == rhs.opportunisticCapacity &&
-        lhs.availableCapacity == rhs.availableCapacity &&
-        lhs.totalCapacity == rhs.totalCapacity &&
-        lhs.path == rhs.path 
+        //lhs.availableCapacity == rhs.availableCapacity &&
+        lhs.totalCapacity == rhs.totalCapacity //&&
     }
 
     var gigsUsed: UInt { UInt(Double(totalCapacity-opportunisticCapacity)/Double(SizeInfo.oneGiga)) }
