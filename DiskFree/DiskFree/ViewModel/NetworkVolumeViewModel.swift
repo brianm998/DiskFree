@@ -11,6 +11,15 @@ enum VolumeType: Equatable,
 
     // XXX expose switched vars here for info about this crap
 
+    var mountPath: String {
+        switch self {
+        case .network(let volume):
+            return volume.localMount
+        case .local(let volume):
+            return volume.userVisibleMountPoint
+        }
+    }
+    
     var name: String {
         switch self {
         case .network(let volume):

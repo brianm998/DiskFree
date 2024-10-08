@@ -28,7 +28,7 @@ struct CombinedChartView: View {
                         ForEach(self.viewModel.localVolumesSortedByEmptyFirst) { volumeView in
                             if volumeView.isSelected {
                               GridRow(alignment: .lastTextBaseline) {
-                                    Text(volumeView.volume.userVisibleMountPoint)
+                                    Text(volumeView.volume.mountPath)
                                       .font(.system(size: viewModel.preferences.legendFontSize))
                                       .foregroundStyle(volumeView.lineColor)
                                     //.background(.red)
@@ -171,7 +171,7 @@ struct CombinedChartView: View {
                               .symbolSize(16)
                               .foregroundStyle(volumeView.lineColor)
                               .annotation(position: .leading, alignment: .bottom) {
-                                  Text(volumeView.volume.userVisibleMountPoint)
+                                  Text(volumeView.volume.mountPath)
                                     .font(.system(size: 22))
                                     .foregroundStyle(volumeView.lineColor)
                                     .frame(maxWidth: 50)
@@ -225,7 +225,6 @@ struct CombinedChartView: View {
             ForEach(self.viewModel.networkVolumes) { volumeView in
                 if volumeView.isSelected {
                     if viewModel.preferences.showFreeSpace {
-                        let _ = print("NETWORK VOLUME IS SELETED \(volumeView) \(volumeView.sizes.count)")
                         ForEach(volumeView.sizes) { sizeData in
                             LineMark(
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
