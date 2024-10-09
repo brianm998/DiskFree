@@ -25,6 +25,24 @@ class VolumeViewModel: Identifiable,
         }
     }
 
+    var isInternal: Bool {
+        switch volume {
+        case .local(let volume):
+            return volume.isInternal 
+        case .network(_):
+            return false
+        }
+    }
+    
+    var isNetwork: Bool {
+        switch volume {
+        case .local(_):
+            return false
+        case .network(_):
+            return true
+        }
+    }
+    
     static func < (lhs: VolumeViewModel, rhs: VolumeViewModel) -> Bool {
         lhs.volume < rhs.volume
     }

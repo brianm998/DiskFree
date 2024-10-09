@@ -18,7 +18,8 @@ public final class ViewModel {
     var networkVolumes: [VolumeViewModel] = []
 
     var allVolumes: [VolumeViewModel] {
-        localVolumes + networkVolumes
+        (localVolumes + networkVolumes)
+          .sorted { $0.lastFreeSize() > $1.lastFreeSize() }
     }
     
     var preferences = Preferences()
@@ -325,21 +326,16 @@ public final class ViewModel {
 
         await MainActor.run {
             self.newNetworkVolumeSizes = records
-
+            
+            for volume in self.networkVolumes {
+                if let newSizes = self.newNetworkVolumeSizes[volume.volume.name] {
+                    volume.lastSize = newSizes.last
+                    volume.sizes = newSizes
+                }
+            }
         }
-        
-        // XXX update the UI
 
-        /*
-         NEXT, populate the 
-         networkVolumes set
-
-         we may not have exactly the same list on each iteration, so add
-         any that are new to networkVolumes
-
-         then update the view model with new network info,
-         like the local view update below
-         */
+        // XXX still don't have alerts for network drives
     }
 
     private func localRecordViewUpdate(records: LocalVolumeRecords,
@@ -368,6 +364,9 @@ public final class ViewModel {
             self.volumeRecordsTimeDurationSeconds = duration
             
             for volume in self.localVolumes {
+
+                // XXX extract this into a method and call it above for network volumes too
+                
                 if let newSizes = self.newLocalVolumeSizes[volume.volume.name] {
                     //print("volume.lastSize \(volume.lastSize)")
 
