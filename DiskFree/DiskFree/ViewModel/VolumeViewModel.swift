@@ -186,6 +186,30 @@ class VolumeViewModel: Identifiable,
     func lastFreeSize() -> UInt {
         self.lastSize?.freeSize_k ?? 0
     }
+
+    // between zero and one
+    // zero is totally empty
+    // one is totally full
+    var amountFull: Double? {
+        if let lastSize {
+            let total = lastSize.totalCapacity
+            let free = lastSize.importantCapacity
+            return Double(total-free)/Double(total)
+        }
+        return nil
+    }
+    
+    // between zero and one
+    // zero is totally full
+    // one is totally empty
+    var amountEmpty: Double? {
+        if let lastSize {
+            let total = lastSize.totalCapacity
+            let free = lastSize.importantCapacity
+            return Double(free)/Double(total)
+        }
+        return nil
+    }
     
     var description: String {
         "\(volume.name) \(chartFreeLineText)"
