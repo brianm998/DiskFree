@@ -11,7 +11,7 @@ public struct NetworkVolume: Sendable,
     public let remotePath: String
     public let localMount: String
     public let type: String
-    public let id = UUID()
+    public let id: UUID
 
     public var name: String { localMount }
 
@@ -21,6 +21,7 @@ public struct NetworkVolume: Sendable,
                 localMount: String,
                 type: String)
     {
+        self.id = UUID()
         self.username = username
         self.remoteHost = remoteHost
         self.remotePath = remotePath
@@ -34,6 +35,7 @@ public struct NetworkVolume: Sendable,
             self.username = String(match.1)
             self.remoteHost = String(match.2)
             self.remotePath = String(match.3)
+            self.id = UUID()
             let localMount = String(match.4) // remove /System/Volumes/Data 
             let undesiredStartString = "/System/Volumes/Data"
             if localMount.starts(with: undesiredStartString) {

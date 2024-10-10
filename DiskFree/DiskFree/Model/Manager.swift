@@ -345,13 +345,10 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
         guard let duActor = dfActors[volume]
         else { throw "no df actor found for volume \(volume.localMount)" }
         
-        let output = try await duActor.execute()
-
-        let outputLines = output.components(separatedBy: "\n") 
-        for line in outputLines {
-            if let ret = SizeInfo(dfOutput: output, timestamp: timestamp) {
-                return ret
-            }
+        if let ret = SizeInfo(dfOutput: try await duActor.execute(),
+                              timestamp: timestamp)
+        {
+            return ret
         }
 
         return nil
