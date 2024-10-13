@@ -335,12 +335,19 @@ class VolumeViewModel: Identifiable,
 
     public var helpText: String {
         var ret =  ""
-        if let lastSize = self.lastSize {
-            ret = "\(lastSize.totalSize) Volume \(volume.name)\n is mounted on \(volume.name)"
-        } else {
-            ret = "Volume \(volume.name)"
+        var volumeType = "External"
+
+        if self.isNetwork {
+            volumeType = "Network"
+        } else if self.isInternal {
+            volumeType = "Internal"
         }
-        return ret
+
+        var lastSizeStr = ""
+        
+        if let lastSize = self.lastSize { lastSizeStr = "\(lastSize.totalSize) " }
+
+        return "\(lastSizeStr)\(volumeType) Volume \(volume.name)\n is mounted on \(volume.mountPath)"
     }
 }
 

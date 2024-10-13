@@ -31,16 +31,16 @@ public final class ViewModel {
     private var cancellables: Set<AnyCancellable> = []
     
     init() {
-        Task {
+        Task.detached {
             // try to load load preferences from file
-            try? await preferenceManager?.loadPreferences()
-            if let preferenceManager,
+            try? await self.preferenceManager?.loadPreferences()
+            if let preferenceManager = self.preferenceManager,
                let preferences = await preferenceManager.getPreferences()
             {
                 await MainActor.run {
                     self.preferences = preferences
                 }
-                await manager.set(maxDataAgeMinutes: preferences.maxDataAgeMinutes)
+              await self.manager.set(maxDataAgeMinutes: preferences.maxDataAgeMinutes)
             }
         }
     }
@@ -75,7 +75,7 @@ public final class ViewModel {
     }
 
     func listNetworkVolumes() {
-        self.networkVolumeTask = Task {
+        self.networkVolumeTask = Task.detached {
 
             let storedRecords = await self.manager.loadStoredNetworkVolumeRecords() 
 
@@ -84,7 +84,7 @@ public final class ViewModel {
             while(true) {
                 do {
                     let (newNetworkVolumes, sizeRecords) =
-                      try await manager.recordNetworkVolumeSizes()
+                      try await self.manager.recordNetworkVolumeSizes()
                     
                     await self.networkRecordViewUpdate(volumes: newNetworkVolumes,
                                                        records: sizeRecords)
@@ -94,34 +94,36 @@ public final class ViewModel {
                      create view models for new network volumes
                      */
 
-                    for newVolume in newNetworkVolumes {
-                        var isNew = true
-                        for volumeView in networkVolumes {
-                            if volumeView.volume == newVolume {
+                    await MainActor.run {
+                        for newVolume in newNetworkVolumes {
+                            var isNew = true
+                            for volumeView in self.networkVolumes {
+                                if volumeView.volume == newVolume {
 
-                                // set sizes here
-                                if let sizes = sizeRecords[volumeView.volume.name] {
-                                    volumeView.sizes = sizes
+                                    // set sizes here
+                                    if let sizes = sizeRecords[volumeView.volume.name] {
+                                        volumeView.sizes = sizes
+                                    }
+                                    isNew = false
+                                    break
                                 }
-                                isNew = false
-                                break
                             }
-                        }
 
-                        if isNew {
-                            let viewModel = VolumeViewModel(volume: newVolume,
-                                                                   color: .purple,
-                                                                   preferences: preferences)
-                            if let sizes = sizeRecords[newVolume.name] {
-                                viewModel.sizes = sizes
+                            if isNew {
+                                let viewModel = VolumeViewModel(volume: newVolume,
+                                                                color: .purple,
+                                                                preferences: self.preferences)
+                                if let sizes = sizeRecords[newVolume.name] {
+                                    viewModel.sizes = sizes
+                                }
+                                self.networkVolumes.append(viewModel)
                             }
-                            self.networkVolumes.append(viewModel)
                         }
                     }
                   
                     try Task.checkCancellation()
                     if !isFirst {
-                        let seconds = await MainActor.run { preferences.networkPollIntervalSeconds }
+                      let seconds = await MainActor.self.run { self.preferences.networkPollIntervalSeconds }
                         
                         // don't sleep the first time so the graph updates quicker
                         try await Task.sleep(nanoseconds: UInt64(seconds*1_000_000_000))
@@ -136,23 +138,23 @@ public final class ViewModel {
     }
     
     func listLocalVolumes() {
-        Task {
+        Task.detached {
             do {
                 await self.manager.loadStoredLocalVolumeRecords()
-                let volumes = try await manager.listLocalVolumes()
-                if preferences.localVolumesToShow.count == 0 {
-                    preferences.localVolumesToShow = Set(volumes.map { $0.name })
-                }
+                let volumes = try await self.manager.listLocalVolumes()
                 await MainActor.run {
+                    if self.preferences.localVolumesToShow.count == 0 {
+                        self.preferences.localVolumesToShow = Set(volumes.map { $0.name })
+                    }
                     var colorIndex = 0
                     self.localVolumes = volumes.map {
                         let ret = VolumeViewModel(volume: $0,
-                                                  color: lineColors[colorIndex],
-                                                  preferences: preferences)
+                                                  color: self.lineColors[colorIndex],
+                                                  preferences: self.preferences)
                         colorIndex += 1
-                        if colorIndex >= lineColors.count { colorIndex = 0 }
+                        if colorIndex >= self.lineColors.count { colorIndex = 0 }
 
-                        if preferences.localVolumesToShow.contains($0.name) {
+                        if self.preferences.localVolumesToShow.contains($0.name) {
                             ret.isSelected = true
                         } else {
                             ret.isSelected = false
@@ -160,7 +162,7 @@ public final class ViewModel {
                         return ret
                     }
                 }
-                self.startLocalVolumeTask()
+                await self.startLocalVolumeTask()
             } catch {
                 print("ERROR: \(error)")
             }
@@ -172,10 +174,26 @@ public final class ViewModel {
 
     public func chartRange(showFree: Bool, showUsed: Bool) -> ClosedRange<UInt> {
 
-        let min = minGigs(showFree: showFree, showUsed: showUsed)
-        let max = maxGigs(showFree: showFree, showUsed: showUsed) + 20
+        var min = minGigs(showFree: showFree, showUsed: showUsed)
+        var max = maxGigs(showFree: showFree, showUsed: showUsed)
 
         if min<max {
+
+            let bufferGigs = (max-min)/8
+
+            print("Fing bufferGigs \(bufferGigs)")
+            
+            if min > bufferGigs {
+                min -= bufferGigs
+            } else {
+                min = 0
+            }
+            if max < UInt.max - bufferGigs {
+                max += bufferGigs
+            } else {
+                max = UInt.max
+            }
+            
             return min...max
         } else {
             return 0...max
@@ -300,7 +318,6 @@ public final class ViewModel {
     /*
      [.mint,
      .green,
-     .blue,
      
      .orange,
 
@@ -314,9 +331,9 @@ public final class ViewModel {
     {
         if shouldSave {
             // save them for later
-            Task {
+            Task.detached {
                 do {
-                    try await networkVolumeRecordKeeper?.save(records: records)
+                    try await self.networkVolumeRecordKeeper?.save(records: records)
                 } catch {
                     print("cannot save network volume records: \(error)")
                 }
@@ -333,6 +350,9 @@ public final class ViewModel {
                     volume.sizes = newSizes
                 }
             }
+
+            // apply colors here
+            applyColors()
         }
 
         // XXX still don't have alerts for network drives
@@ -344,9 +364,9 @@ public final class ViewModel {
 
         if shouldSave {
             // save them for later
-            Task {
+            Task.detached {
                 do {
-                    try await localVolumeRecordKeeper?.save(records: records)
+                    try await self.localVolumeRecordKeeper?.save(records: records)
                 } catch {
                     print("cannot save local volume records: \(error)")
                 }
@@ -411,57 +431,77 @@ public final class ViewModel {
             }
 
             // apply colors here
-
-            let volumesEmptyFirst = self.localVolumes.sorted {
-                $0.lastFreeSize() > $1.lastFreeSize()
-            }
-            
-            var colorIndex = 0
-            var lastSelectedViewModel: VolumeViewModel? = nil
-            var firstSelectedViewModel: VolumeViewModel? = nil
-            for volumeViewModel in volumesEmptyFirst {
-                volumeViewModel.isMostFull = false
-                volumeViewModel.isMostEmpty = false
-                if volumeViewModel.isSelected {
-                    if firstSelectedViewModel == nil {
-                        firstSelectedViewModel = volumeViewModel
-                        volumeViewModel.lineColor = .green
-                    } else {
-                        volumeViewModel.lineColor = lineColors[colorIndex]
-                        colorIndex += 1
-                        if colorIndex >= lineColors.count { colorIndex = 0 }
-                    }
-                    lastSelectedViewModel = volumeViewModel
-                } else {
-                    volumeViewModel.isMostFull = false
-                }
-            }
-
-            if let lastSelectedViewModel {
-                lastSelectedViewModel.isMostFull = true
-                lastSelectedViewModel.lineColor = .red
-            }
-
-            if let firstSelectedViewModel {
-                firstSelectedViewModel.isMostEmpty = true
-            }
+            applyColors()
 
             let endTime = Date().timeIntervalSince1970
             print("view update took \(endTime-startTime) seconds")
         }
     }
 
+    private func applyColors() {
+        let volumesEmptyFirst = self.allVolumes.filter { $0.isSelected }.sorted {
+            $0.lastFreeSize() > $1.lastFreeSize()
+        }
+        
+        var colorIndex = 0
+        var lastSelectedViewModel: VolumeViewModel? = nil
+        var firstSelectedViewModel: VolumeViewModel? = nil
+
+        let minHue = 0.3
+        let maxHue = 1.0
+
+        
+        var hueStep = 1.0
+        if volumesEmptyFirst.count > 1 {
+            hueStep = (maxHue-minHue)/Double(volumesEmptyFirst.count-1)
+        }
+
+        var currentHue = minHue 
+        
+        for volumeViewModel in volumesEmptyFirst {
+            volumeViewModel.isMostFull = false
+            volumeViewModel.isMostEmpty = false
+
+            if firstSelectedViewModel == nil {
+                firstSelectedViewModel = volumeViewModel
+                //                    volumeViewModel.lineColor = .green
+            } else {
+                //                    volumeViewModel.lineColor = lineColors[colorIndex]
+                colorIndex += 1
+                if colorIndex >= lineColors.count { colorIndex = 0 }
+            }
+            // 0.00 - dark red
+            // 0.25 - greenish
+            // 0.50 - bluish
+            // 0.75 - purple
+            // 1.00 - red again
+            
+            volumeViewModel.lineColor = Color(hue: currentHue, saturation: 1, brightness: 1)
+            print("using currentHue \(currentHue)")
+            currentHue += hueStep
+            lastSelectedViewModel = volumeViewModel
+        }
+
+        if let lastSelectedViewModel {
+            lastSelectedViewModel.isMostFull = true
+        }
+
+        if let firstSelectedViewModel {
+            firstSelectedViewModel.isMostEmpty = true
+        }
+    }
+    
     private func startLocalVolumeTask() {
-        self.localVolumeTask = Task {
+        self.localVolumeTask = Task.detached {
             var isFirst = true
             // then iterate until we are cancelled
             while(true) {
                 do {
-                    await self.localRecordViewUpdate(records: try await manager.recordLocalVolumeSizes())
+                  await self.localRecordViewUpdate(records: try await self.manager.recordLocalVolumeSizes())
 
                     try Task.checkCancellation()
                     if !isFirst {
-                        let seconds = await MainActor.run { preferences.localPollIntervalSeconds }
+                      let seconds = await MainActor.run { self.preferences.localPollIntervalSeconds }
                         
                         // don't sleep the first time so the graph updates quicker
                         try await Task.sleep(nanoseconds: UInt64(seconds*1_000_000_000))
@@ -476,9 +516,9 @@ public final class ViewModel {
     }
 
     func updateManager() {
-      Task {
-       await self.manager.set(maxDataAgeMinutes: preferences.maxDataAgeMinutes)
-      }
+        Task.detached {
+          await self.manager.set(maxDataAgeMinutes: self.preferences.maxDataAgeMinutes)
+        }
     }
     
     func update() {
@@ -498,7 +538,7 @@ public final class ViewModel {
 
     func savePreferences() {
         let prefsToSave = self.preferences
-        Task {
+        Task.detached {
             do {
               await self.preferenceManager?.set(preferences: prefsToSave)
                 try await self.preferenceManager?.writePreferences()
