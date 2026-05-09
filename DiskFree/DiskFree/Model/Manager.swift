@@ -4,7 +4,6 @@ import Foundation
 
  todo:
 
- - write release scripts
  - implement version number somewhere
  - allow removing items from chart?
  - add loading animation at start
@@ -184,6 +183,8 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
     func listLocalVolumes() async throws -> [LocalVolume] {
 
         let rootSymlinks = try await readRootSymlinks()
+
+        print("rootSymlinks \(rootSymlinks)")
         
         let output = try await diskUtilActor.execute()
 //        print(output)  // printing out the full diskutil output is EXTREMELY verbose
@@ -253,29 +254,38 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
     }
 
     func recordNetworkVolumeSizes() async throws -> ([NetworkVolume], NetworkVolumeRecords) {
-        
+
         // list mounts available now
         let networkVolumes = try await readNetworkVolumes()
         let timestamp = Date().timeIntervalSince1970
 
-        for volume in networkVolumes {
-            // run a df actor on them
-            print("FUCKING df'ing \(volume)")
-            if let size = try await sizeOf(volume: volume, at: timestamp) {
-                // add to list of network volume sizes
-
-                print("FUCKING got size \(size) for \(volume)")
-
-                if var existingList = networkVolumeSizes[volume.localMount] {
-                    existingList.append(size)
-                    networkVolumeSizes[volume.localMount] = existingList
-                } else {
-                    networkVolumeSizes[volume.localMount] = [size]
+        await withTaskGroup(of: (NetworkVolume, SizeInfo?)?.self) { group in
+            for volume in networkVolumes {
+                group.addTask {
+                    do {
+                        if let size = try await self.sizeOf(volume: volume, at: timestamp) {
+                            return (volume, size)
+                        }
+                    } catch {
+                        print("Error querying \(volume.localMount): \(error)")
+                    }
+                    return nil
                 }
-            } else {
-                print("FUCKING DIDN'T GET SIZE for \(volume)")
             }
 
+            for await result in group {
+                if let (volume, size) = result {
+                    if let size {
+                        print("got size \(size) for \(volume)")
+                        if var existingList = networkVolumeSizes[volume.localMount] {
+                            existingList.append(size)
+                            networkVolumeSizes[volume.localMount] = existingList
+                        } else {
+                            networkVolumeSizes[volume.localMount] = [size]
+                        }
+                    }
+                }
+            }
         }
 
         // only keep newer entries 
@@ -344,10 +354,26 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
         }
         guard let duActor = dfActors[volume]
         else { throw "no df actor found for volume \(volume.localMount)" }
-        
-        if let ret = SizeInfo(dfOutput: try await duActor.execute(),
-                              timestamp: timestamp)
-        {
+
+        let timeoutNanoseconds: UInt64 = 10_000_000_000 // 10 seconds
+        let result = try await withThrowingTaskGroup(of: String.self) { group in
+            group.addTask {
+                try await duActor.execute()
+            }
+
+            group.addTask {
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
+                throw "network volume query timeout for \(volume.localMount)"
+            }
+
+            if let output = try await group.next() {
+                group.cancelAll()
+                return output
+            }
+            throw "network volume query failed for \(volume.localMount)"
+        }
+
+        if let ret = SizeInfo(dfOutput: result, timestamp: timestamp) {
             return ret
         }
 

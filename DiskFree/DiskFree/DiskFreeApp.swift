@@ -13,5 +13,13 @@ struct DiskFreeApp: App {
         WindowGroup {
             ContentView()
         }
+
+        Window("About Disk Free", id: "about") { // doesn't show up :(
+            Text("About")
+              .toolbarBackground(.hidden, for: .windowToolbar)
+              .containerBackground(.thickMaterial, for: .window)
+//              .windowMinimizeBehaviour(.disabled)
+        }
+        
     }
 }

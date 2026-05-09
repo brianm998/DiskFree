@@ -11,17 +11,22 @@ struct CombinedChartLegendView: View {
                     ScrollView {
                         Text("Free Space")
                           .font(.system(size: viewModel.preferences.legendFontSize))
+                          .foregroundColor(.black)
+
                         Grid(alignment: .leading, horizontalSpacing: 4, verticalSpacing: 0) {
                             ForEach(self.viewModel.allVolumes) { volumeView in
                                 if volumeView.isSelected {
                                     CombinedChartLegendItemView(volumeView: volumeView)
                                 }
+
                             }
                         }
+//                          .background(LinearGradient(gradient: Gradient(colors: [.black, .white]),
+//                                                     startPoint: .top, endPoint: .bottom))
                     }
                     Spacer()
                       .frame(height: 20)
-                }
+                }                
             }
         }
           .frame(maxHeight: .infinity)
