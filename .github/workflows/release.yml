@@ -93,7 +93,14 @@ jobs:
             exit 1
           fi
           rm -f "$P12"
-          echo "has_cert=true" >> "$GITHUB_OUTPUT"
+          # Extract the signing identity from the keychain so callers don't
+          # need a separate APPLE_SIGN_IDENTITY secret.
+          APP_IDENTITY=$(security find-identity -v "$KC" \
+            | grep "Developer ID Application:.*${TEAM}" \
+            | head -1 \
+            | sed 's/.*"\(.*\)"/\1/')
+          echo "has_cert=true"             >> "$GITHUB_OUTPUT"
+          echo "sign_identity=$APP_IDENTITY" >> "$GITHUB_OUTPUT"
 
       - name: Stage App Store Connect API key
         if: steps.cert.outputs.has_cert == 'true'
@@ -108,7 +115,7 @@ jobs:
       - name: Build, sign, notarize, and package
         env:
           VERSION:             ${{ needs.version.outputs.version }}
-          SIGN_IDENTITY:       ${{ secrets.APPLE_SIGN_IDENTITY }}
+          SIGN_IDENTITY:       ${{ steps.cert.outputs.sign_identity }}
           APPLE_TEAM_ID:       ${{ secrets.APPLE_TEAM_ID }}
           APPLE_API_KEY_PATH:  ${{ runner.temp }}/private_keys/AuthKey_${{ secrets.APPLE_API_KEY_ID }}.p8
           APPLE_API_KEY_ID:    ${{ secrets.APPLE_API_KEY_ID }}
