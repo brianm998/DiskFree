@@ -38,9 +38,6 @@ mkdir -p "${BUILD_DIR}"
 perl -pi -e "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = ${VERSION}/" DiskFree.xcodeproj/project.pbxproj
 perl -pi -e "s/CURRENT_PROJECT_VERSION = [^;]*/CURRENT_PROJECT_VERSION = ${VERSION}/" DiskFree.xcodeproj/project.pbxproj
 
-# build for all archs
-perl -pi -e 's/ONLY_ACTIVE_ARCH = YES/ONLY_ACTIVE_ARCH = NO/' DiskFree.xcodeproj/project.pbxproj
-
 # CI passes --sign to use manual signing with the imported cert; local builds
 # use the project's automatic signing with the developer's own keychain.
 CODE_SIGN_FLAGS=()
@@ -57,7 +54,10 @@ xcodebuild \
     -project "DiskFree.xcodeproj" \
     -scheme "DiskFree" \
     -configuration "Release" \
+    -destination "generic/platform=macOS" \
     -archivePath "${BUILD_DIR}/DiskFree.xcarchive" \
+    ONLY_ACTIVE_ARCH=NO \
+    "ARCHS=arm64 x86_64" \
     "${CODE_SIGN_FLAGS[@]}" \
     archive
 
@@ -150,8 +150,5 @@ if $NOTARIZE; then
     notarize_submit "$PKG_NAME"
     xcrun stapler staple "$PKG_NAME"
 fi
-
-# restore active-arch flag for development
-perl -pi -e 's/ONLY_ACTIVE_ARCH = NO/ONLY_ACTIVE_ARCH = YES/' DiskFree.xcodeproj/project.pbxproj
 
 echo "signed, notarized and stapled results packaged up in ${PKG_NAME}"
