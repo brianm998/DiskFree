@@ -35,6 +35,7 @@ struct MainView: View {
               }
           }
           .onAppear {
+              if viewModel.isDemo { return }
               viewModel.listLocalVolumes()
               viewModel.listNetworkVolumes()
           }

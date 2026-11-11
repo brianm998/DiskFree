@@ -29,8 +29,22 @@ public final class ViewModel {
     var volumeRecordsTimeDurationSeconds: TimeInterval = 0
 
     private var cancellables: Set<AnyCancellable> = []
-    
+
+    /// true only for App Store screenshot launches: demo data, no polling,
+    /// nothing read from or written to disk
+    let isDemo: Bool
+
+    /// screenshot mode: deterministic demo volumes, see ScreenshotMode
+    init(demo: Bool) {
+        precondition(demo)
+        self.isDemo = true
+        ScreenshotMode.populate(self)
+    }
+
+    func applyDemoColors() { applyColors() }
+
     init() {
+        self.isDemo = false
         Task.detached {
             // try to load load preferences from file
             try? await self.preferenceManager?.loadPreferences()
@@ -581,6 +595,7 @@ public final class ViewModel {
     }
 
     func savePreferences() {
+        if isDemo { return }
         let prefsToSave = self.preferences
         Task.detached {
             do {
