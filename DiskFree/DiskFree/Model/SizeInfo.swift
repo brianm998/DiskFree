@@ -25,6 +25,18 @@ public struct SizeInfo: Sendable,
     public var freeSize_k: UInt { UInt(importantCapacity/1024) }
     public var totalSize_k: UInt { UInt(totalCapacity/1024) }
 
+    // direct construction from byte counts (used by tests and previews)
+    init(importantCapacity: Int,
+         opportunisticCapacity: Int,
+         totalCapacity: Int,
+         timestamp: TimeInterval)
+    {
+        self.importantCapacity = importantCapacity
+        self.opportunisticCapacity = opportunisticCapacity
+        self.totalCapacity = totalCapacity
+        self.timestamp = timestamp
+    }
+
     // size info from df output
     init?(dfOutput: String, timestamp: TimeInterval) {
         /*
