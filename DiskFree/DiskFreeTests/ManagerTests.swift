@@ -58,6 +58,41 @@ struct NetworkPollTests {
     }
 }
 
+struct NetworkProbeTests {
+    @Test func hungProbeTimesOutAndOthersStillReport() async throws {
+        let hung = NetworkVolume(username: "u", remoteHost: "h", remotePath: "/p",
+                                 localMount: "/Volumes/hung", type: "smbfs")
+        let ok = NetworkVolume(username: "u", remoteHost: "h", remotePath: "/p",
+                               localMount: "/Volumes/ok", type: "smbfs")
+        let release = DispatchSemaphore(value: 0)
+        let m = Manager()
+        await m.setProbeOverride({ path, ts in
+            if path == "/Volumes/hung" { release.wait() }
+            return SizeInfo(importantCapacity: 1, opportunisticCapacity: 1, totalCapacity: 2, timestamp: ts)
+        }, timeout: 0.5)
+        await m.setOverrides(mountListing: { [hung, ok] }, networkSize: nil)
+        let start = Date()
+        let (_, records) = try await m.recordNetworkVolumeSizes()
+        #expect(Date().timeIntervalSince(start) < 3)
+        #expect(records["/Volumes/ok"]?.count == 1)
+        #expect(records["/Volumes/hung"] == nil)
+        release.signal()
+    }
+}
+
+struct RootSymlinkTests {
+    @Test func mapsRealPathToUserPath() {
+        let m = Manager.rootSymlinkMap(from: [
+            ("home", "/System/Volumes/Data/home"),
+            ("op", "Volumes/op"),
+            ("etc", "private/etc"),
+        ])
+        #expect(m["/System/Volumes/Data/home"] == "/home")
+        #expect(m["/Volumes/op"] == "/op")
+        #expect(m["/private/etc"] == "/etc")
+    }
+}
+
 actor Listings {
     var items: [[NetworkVolume]]
     init(_ items: [[NetworkVolume]]) { self.items = items }

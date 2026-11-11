@@ -3,10 +3,12 @@ import Foundation
 @testable import DiskFree
 
 struct VolumeTypeTests {
-    static let smb = "//brian@nas.local/share on /Volumes/share (smbfs, nodev)"
-    static let afp = "//admin@beast.local/root on /System/Volumes/Data/mnt/root (afpfs, nodev)"
+    static let smb = (from: "//brian@nas.local/share", on: "/Volumes/share", type: "smbfs")
+    static let afp = (from: "//admin@beast.local/root", on: "/System/Volumes/Data/mnt/root", type: "afpfs")
 
-    func net(_ line: String) throws -> NetworkVolume { try #require(NetworkVolume(from: line)) }
+    func net(_ t: (from: String, on: String, type: String)) throws -> NetworkVolume {
+        try #require(NetworkVolume(mountedFrom: t.from, onPath: t.on, fsType: t.type))
+    }
     func local(_ name: String) -> LocalVolume {
         LocalVolume(name: name, mountPoint: "/Volumes/\(name)",
                     userVisibleMountPoint: "/Volumes/\(name)",

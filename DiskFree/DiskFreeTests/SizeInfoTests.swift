@@ -3,35 +3,27 @@ import Foundation
 @testable import DiskFree
 
 struct SizeInfoTests {
-    static let header = "Filesystem    1024-blocks       Used Available Capacity iused      ifree %iused  Mounted on\n"
-    static let localLine = "/dev/disk14s2  3906870272 3582336656 324533616    92%   97180 4294870099    0%   /Volumes/op"
-    static let smbLine = "//admin@beast.local/root  5809283456 642511216 5166772240    12% 160627802 1291693060   11%   /System/Volumes/Data/mnt/root"
+    func fs(blocks: UInt64, bavail: UInt64, bsize: UInt32) -> statfs {
+        var f = statfs()
+        f.f_blocks = blocks
+        f.f_bavail = bavail
+        f.f_bsize = bsize
+        return f
+    }
 
-    @Test func localVolumeLine() throws {
-        let s = try #require(SizeInfo(dfOutput: Self.header + Self.localLine, timestamp: 5))
-        #expect(s.totalCapacity == 3906870272 * 1024)
-        #expect(s.importantCapacity == 324533616 * 1024)
-        #expect(s.opportunisticCapacity == 324533616 * 1024)
+    @Test func statfsMapping() throws {
+        let s = try #require(SizeInfo(statfs: fs(blocks: 1000, bavail: 600, bsize: 4096), timestamp: 5))
+        #expect(s.totalCapacity == 1000 * 4096)
+        #expect(s.importantCapacity == 600 * 4096)
+        #expect(s.opportunisticCapacity == 600 * 4096)
         #expect(s.timestamp == 5)
-        #expect(s.freeSize_k == 324533616)
-        #expect(s.totalSize_k == 3906870272)
+        #expect(s.freeSize_k == 600 * 4)
+        #expect(s.totalSize_k == 1000 * 4)
     }
 
-    @Test func smbVolumeLine() throws {
-        let s = try #require(SizeInfo(dfOutput: Self.header + Self.smbLine + "\n", timestamp: 1))
-        #expect(s.totalCapacity == 5809283456 * 1024)
-        #expect(s.freeSize_k == 5166772240)
-    }
-
-    @Test func headerOnlyIsNil() {
-        #expect(SizeInfo(dfOutput: Self.header, timestamp: 1) == nil)
-        #expect(SizeInfo(dfOutput: "", timestamp: 1) == nil)
-    }
-
-    @Test func malformedLineIsNil() {
-        #expect(SizeInfo(dfOutput: Self.header + "garbage here", timestamp: 1) == nil)
-        #expect(SizeInfo(dfOutput: Self.header + "/dev/disk1 abc def ghi", timestamp: 1) == nil)
-        #expect(SizeInfo(dfOutput: Self.header + "/dev/disk1 100 50", timestamp: 1) == nil)
+    @Test func statfsEmptyIsNil() {
+        #expect(SizeInfo(statfs: fs(blocks: 0, bavail: 0, bsize: 4096), timestamp: 1) == nil)
+        #expect(SizeInfo(statfs: statfs(), timestamp: 1) == nil)
     }
 
     @Test func derivedGigs() {
@@ -58,27 +50,14 @@ struct SizeInfoTests {
     }
 
     @Test func equality() throws {
-        let a = try #require(SizeInfo(dfOutput: Self.header + Self.localLine, timestamp: 5))
-        let b = try #require(SizeInfo(dfOutput: Self.header + Self.localLine, timestamp: 5))
-        let c = try #require(SizeInfo(dfOutput: Self.header + Self.localLine, timestamp: 6))
-        let d = try #require(SizeInfo(dfOutput: Self.header + Self.smbLine, timestamp: 5))
+        let f = fs(blocks: 100, bavail: 40, bsize: 1024)
+        let a = try #require(SizeInfo(statfs: f, timestamp: 5))
+        let b = try #require(SizeInfo(statfs: f, timestamp: 5))
+        let c = try #require(SizeInfo(statfs: f, timestamp: 6))
+        let d = try #require(SizeInfo(statfs: fs(blocks: 100, bavail: 41, bsize: 1024), timestamp: 5))
         #expect(a == b)
         #expect(a != c)
         #expect(a != d)
         #expect(a.id == "5.0")
-    }
-
-    @Test func hyphenatedHostDf() throws {
-        let line = "//admin@my-nas-2.local/data  1000 400 600    40% 1 2   0%   /Volumes/data"
-        let s = try #require(SizeInfo(dfOutput: Self.header + line, timestamp: 1))
-        #expect(s.totalCapacity == 1000 * 1024)
-        #expect(s.importantCapacity == 600 * 1024)
-    }
-
-    @Test func percentEncodedShareDf() throws {
-        let line = "//brian@nas.local/My%20Share  2000 500 1500    25% 1 2   0%   /Volumes/My Share"
-        let s = try #require(SizeInfo(dfOutput: Self.header + line, timestamp: 1))
-        #expect(s.totalCapacity == 2000 * 1024)
-        #expect(s.importantCapacity == 1500 * 1024)
     }
 }
