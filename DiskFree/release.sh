@@ -7,6 +7,9 @@ set -e
 # Local usage (uses keychain profile "diskfree"):
 #   ./release.sh --version 0.8.1 --notarize
 #
+# App Store uploads need a build number that rises on every upload of the same
+# version; pass --build-number N (defaults to the version string).
+#
 # CI usage (uses App Store Connect API key from env vars):
 #   ./release.sh --version 0.8.1 --sign "Developer ID Application: ..." --notarize
 #
@@ -16,18 +19,22 @@ set -e
 BUILD_DIR=.build
 APP_NAME=DiskFree
 VERSION="0.8.0"
+BUILD_NUMBER=""
 SIGN_IDENTITY=""
 NOTARIZE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --version)  VERSION="$2";       shift 2 ;;
+        --build-number) BUILD_NUMBER="$2"; shift 2 ;;
         --sign)     SIGN_IDENTITY="$2"; shift 2 ;;
         --notarize) NOTARIZE=true;      shift ;;
         --out)      BUILD_DIR="$2";     shift 2 ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
+
+BUILD_NUMBER="${BUILD_NUMBER:-$VERSION}"
 
 PKG_NAME="${BUILD_DIR}/disk_free_${VERSION}.pkg"
 
@@ -36,7 +43,7 @@ mkdir -p "${BUILD_DIR}"
 
 # stamp version into project
 perl -pi -e "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = ${VERSION}/" DiskFree.xcodeproj/project.pbxproj
-perl -pi -e "s/CURRENT_PROJECT_VERSION = [^;]*/CURRENT_PROJECT_VERSION = ${VERSION}/" DiskFree.xcodeproj/project.pbxproj
+perl -pi -e "s/CURRENT_PROJECT_VERSION = [^;]*/CURRENT_PROJECT_VERSION = ${BUILD_NUMBER}/" DiskFree.xcodeproj/project.pbxproj
 
 # CI passes --sign to use manual signing with the imported cert; local builds
 # use the project's automatic signing with the developer's own keychain.
