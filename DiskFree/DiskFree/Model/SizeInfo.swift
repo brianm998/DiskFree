@@ -47,8 +47,9 @@ Filesystem    1024-blocks       Used Available Capacity iused      ifree %iused 
 //admin@beast.local/root  5809283456 642511216 5166772240    12% 160627802 1291693060   11%   /System/Volumes/Data/mnt/root
          */
 
-        // should match the beginning of the second line
-        let regex = /^\/\/?[\/@\w.]+\s+(\d+)\s+(\d+)\s+(\d+)/
+        // total, used and available blocks followed by the capacity percent;
+        // the Filesystem column can be anything so it is not matched
+        let regex = /\s(\d+)\s+(\d+)\s+(\d+)\s+\d+%/
 
         let lines = dfOutput.components(separatedBy: "\n")
         if lines.count > 1,

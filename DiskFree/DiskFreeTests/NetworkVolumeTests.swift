@@ -25,8 +25,37 @@ struct NetworkVolumeTests {
         #expect(v.type == "smbfs")
     }
 
-    @Test func lineWithoutUsernameIsNil() {
-        #expect(NetworkVolume(from: "//nas.local/share on /Volumes/share (smbfs, nodev)") == nil)
+    @Test func lineWithoutUsername() throws {
+        let v = try #require(NetworkVolume(from: "//nas.local/share on /Volumes/share (smbfs, nodev)"))
+        #expect(v.username == "")
+        #expect(v.remoteHost == "nas.local")
+        #expect(v.remotePath == "/share")
+        #expect(v.localMount == "/Volumes/share")
+    }
+
+    @Test func hyphenatedHost() throws {
+        let v = try #require(NetworkVolume(from: "//admin@my-nas-2.local/data on /Volumes/data (smbfs, nodev)"))
+        #expect(v.username == "admin")
+        #expect(v.remoteHost == "my-nas-2.local")
+        #expect(v.remotePath == "/data")
+    }
+
+    @Test func percentEncodedShare() throws {
+        let v = try #require(NetworkVolume(from: "//brian@nas.local/My%20Share on /Volumes/My Share (smbfs, nodev)"))
+        #expect(v.remotePath == "/My%20Share")
+        #expect(v.localMount == "/Volumes/My Share")
+    }
+
+    @Test func remountedPathWithSuffix() throws {
+        let v = try #require(NetworkVolume(from: "//brian@nas.local/share on /Volumes/share-1 (smbfs, nodev)"))
+        #expect(v.localMount == "/Volumes/share-1")
+        #expect(v.type == "smbfs")
+    }
+
+    @Test func localMountWithSpace() throws {
+        let v = try #require(NetworkVolume(from: "//admin@beast.local/root on /System/Volumes/Data/mnt/my root (afpfs, nodev)"))
+        #expect(v.localMount == "/mnt/my root")
+        #expect(v.type == "afpfs")
     }
 
     @Test func localLineIsNil() {

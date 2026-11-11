@@ -54,6 +54,24 @@ public actor Manager: Sendable {
     private var localVolumeSizes: LocalVolumeRecords = [:] // keyed by volume.name
     private var networkVolumeSizes: NetworkVolumeRecords = [:] // keyed by volume.localMount
 
+    // every network volume seen this run, keyed by localMount. Automounted
+    // shares vanish from `mount` when idle but still work (and remount on access)
+    private var knownNetworkVolumes: [String: NetworkVolume] = [:]
+
+    var dfTimeoutSeconds: TimeInterval = 10
+
+    // test seam: replaces the output of `mount`
+    var mountListingOverride: (@Sendable () async throws -> [NetworkVolume])?
+    // test seam: replaces the df call
+    var networkSizeOverride: (@Sendable (NetworkVolume, TimeInterval) async throws -> SizeInfo?)?
+
+    func setOverrides(mountListing: (@Sendable () async throws -> [NetworkVolume])?,
+                      networkSize: (@Sendable (NetworkVolume, TimeInterval) async throws -> SizeInfo?)?)
+    {
+        mountListingOverride = mountListing
+        networkSizeOverride = networkSize
+    }
+
     public func loadStoredLocalVolumeRecords() async {
         do {
             if let recordKeeper = LocalVolumeRecordKeeper() {
@@ -260,7 +278,14 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
     func recordNetworkVolumeSizes() async throws -> ([NetworkVolume], NetworkVolumeRecords) {
 
         // list mounts available now
-        let networkVolumes = try await readNetworkVolumes()
+        let mounted: [NetworkVolume]
+        if let mountListingOverride {
+            mounted = try await mountListingOverride()
+        } else {
+            mounted = try await readNetworkVolumes()
+        }
+        for v in mounted { knownNetworkVolumes[v.localMount] = v }
+        let networkVolumes = knownNetworkVolumes.values.sorted()
         let timestamp = Date().timeIntervalSince1970
 
         await withTaskGroup(of: (NetworkVolume, SizeInfo?)?.self) { group in
@@ -348,29 +373,17 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
     
     // size of network volume
     func sizeOf(volume: NetworkVolume, at timestamp: TimeInterval) async throws -> SizeInfo? {
+        if let networkSizeOverride {
+            return try await networkSizeOverride(volume, timestamp)
+        }
         if dfActors[volume] == nil {
-            dfActors[volume] = ShellActor("df", arguments: ["-k", "'\(volume.localMount)'"])
+            // arguments go straight to the process, no shell, so no quoting
+            dfActors[volume] = ShellActor("df", arguments: ["-k", volume.localMount])
         }
         guard let duActor = dfActors[volume]
         else { throw "no df actor found for volume \(volume.localMount)" }
 
-        let timeoutNanoseconds: UInt64 = 10_000_000_000 // 10 seconds
-        let result = try await withThrowingTaskGroup(of: String.self) { group in
-            group.addTask {
-                try await duActor.execute()
-            }
-
-            group.addTask {
-                try await Task.sleep(nanoseconds: timeoutNanoseconds)
-                throw "network volume query timeout for \(volume.localMount)"
-            }
-
-            if let output = try await group.next() {
-                group.cancelAll()
-                return output
-            }
-            throw "network volume query failed for \(volume.localMount)"
-        }
+        let result = try await duActor.execute(timeout: dfTimeoutSeconds)
 
         if let ret = SizeInfo(dfOutput: result, timestamp: timestamp) {
             return ret
