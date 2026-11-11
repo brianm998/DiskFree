@@ -49,7 +49,7 @@ public actor Manager: Sendable {
 
     private var volumes: [LocalVolume] = []
 
-    private var dfActors: [NetworkVolume:ShellActor] = [:] // used for network volumes 
+    private let inFlightProbes = InFlightProbes() // network mounts with a statfs outstanding
     
     private var localVolumeSizes: LocalVolumeRecords = [:] // keyed by volume.name
     private var networkVolumeSizes: NetworkVolumeRecords = [:] // keyed by volume.localMount
@@ -62,8 +62,15 @@ public actor Manager: Sendable {
 
     // test seam: replaces the output of `mount`
     var mountListingOverride: (@Sendable () async throws -> [NetworkVolume])?
-    // test seam: replaces the df call
+    // test seam: replaces the statfs probe of a network mount (runs on a background thread)
+    var networkProbeOverride: (@Sendable (String, TimeInterval) -> SizeInfo?)?
+    // test seam: replaces the size lookup of a network volume
     var networkSizeOverride: (@Sendable (NetworkVolume, TimeInterval) async throws -> SizeInfo?)?
+
+    func setProbeOverride(_ probe: (@Sendable (String, TimeInterval) -> SizeInfo?)?, timeout: TimeInterval? = nil) {
+        networkProbeOverride = probe
+        if let timeout { dfTimeoutSeconds = timeout }
+    }
 
     func setOverrides(mountListing: (@Sendable () async throws -> [NetworkVolume])?,
                       networkSize: (@Sendable (NetworkVolume, TimeInterval) async throws -> SizeInfo?)?)
@@ -106,8 +113,6 @@ public actor Manager: Sendable {
     
     // keep track of volume sizes
 
-    let diskUtilActor = ShellActor("diskutil", arguments: ["info", "-all"])
-
     func set(volumes: [LocalVolume]) {
         self.volumes = volumes
     }
@@ -117,158 +122,83 @@ public actor Manager: Sendable {
     }
 
     func readNetworkVolumes() async throws -> [NetworkVolume] {
+        // statfs gives f_mntfromname like //floof@mammoth/mammoth, f_mntonname
+        // like /System/Volumes/Data/mammoth and f_fstypename like smbfs / afpfs
+        NetworkVolume.mounted()
+    }
 
-        /*
-//floof@mammoth/mammoth on /System/Volumes/Data/mammoth (smbfs, nodev, nosuid, automounted, noowners, nobrowse, mounted by brian)
-//admin@goliath.local/branch on /System/Volumes/Data/mnt/branch (afpfs, nodev, nosuid, automounted, nobrowse, mounted by brian)
-//admin@goliath.local/trunk on /System/Volumes/Data/mnt/trunk (afpfs, nodev, nosuid, automounted, nobrowse, mounted by brian)
-//admin@colossus.local/tree on /System/Volumes/Data/mnt/tree (afpfs, nodev, nosuid, automounted, nobrowse, mounted by brian)
-//admin@beast.local/root on /System/Volumes/Data/mnt/root (afpfs, nodev, nosuid, automounted, nobrowse, mounted by brian)
-         */
-        let syntheticConfigActor = ShellActor("mount", arguments: [])
-
-        let output = try await syntheticConfigActor.execute()
-
-        let outputLines = output.components(separatedBy: "\n")
-
-//        print("mount: \(output)")
-
-        var ret: [NetworkVolume] = []
-        
-        for line in outputLines {
-            if let networkVolume = NetworkVolume(from: line) {
-                ret.append(networkVolume)
-//                print("found \(networkVolume)")
-                /*
-
-                 next steps:
-
-                 - package the above values into a Sendable struct
-                 - add a parallel remote/local path for it
-                   * add new json file
-                   * use new polling interval
-                   - add separate ui, similar, but different
-                   - add remote / local global config options
-                   - 
-                 */
-            }            
+    // maps the real path of a root symlink to its user visible path, e.g.
+    // /Volumes/op -> /op. `links` is (name in /, symlink destination)
+    static func rootSymlinkMap(from links: [(name: String, destination: String)]) -> [String: String] {
+        var ret: [String: String] = [:]
+        for (name, destination) in links {
+            var rootPath = name
+            var realPath = destination
+            if !realPath.starts(with: "/") { realPath = "/\(realPath)" }
+            if !rootPath.starts(with: "/") { rootPath = "/\(rootPath)" }
+            ret[realPath] = rootPath
         }
         return ret
     }
 
     func readRootSymlinks() async throws -> [String: String] { // /Volumes/op -> /op
-        /*
-
-lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 etc -> private/etc
-lrwxr-xr-x    1 root  wheel    25 Sep 26 15:55 home -> /System/Volumes/Data/home
-lrwxr-xr-x    1 root  wheel    28 Sep 29 10:58 mammoth -> /System/Volumes/Data/mammoth
-lrwxr-xr-x    1 root  wheel    24 Sep 26 15:55 mnt -> /System/Volumes/Data/mnt
-lrwxr-xr-x    1 root  wheel    10 Sep 26 15:55 op -> Volumes/op
-drwxr-xr-x    5 root  wheel   160 Jun 25 07:05 opt
-lrwxr-xr-x    1 root  wheel    10 Sep 26 15:55 pp -> Volumes/pp
-drwxr-xr-x    6 root  wheel   192 Sep 26 15:55 private
-lrwxr-xr-x    1 root  wheel    10 Sep 26 15:55 qp -> Volumes/qp
-lrwxr-xr-x    1 root  wheel    10 Sep 26 15:55 rp -> Volumes/rp
-drwxr-xr-x@  77 root  wheel  2464 Sep  5 13:54 sbin
-lrwxr-xr-x    1 root  wheel    10 Sep 26 15:55 sp -> Volumes/sp
-lrwxr-xr-x    1 root  wheel     3 Sep 26 15:55 sw -> usr
-lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 tmp -> private/tmp
-drwxr-xr-x@  11 root  wheel   352 Sep  5 13:54 usr
-lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
-         
-         */
-
-        var ret: [String: String] = [:]
-
-        // first read /etc/synthetic.conf
-        // XXX cannot read synthetic.conf, but can read ls -l / :)
-        let syntheticConfigActor = ShellActor("ls", arguments: ["-l", "/"])
-
-        let output = try await syntheticConfigActor.execute()
-        let outputLines = output.components(separatedBy: "\n")
-
-//        print("syntheticConfigOutput \(output)")
-        
-        for line in outputLines {
-            if let match = line.firstMatch(of: /([\/\w]+)\s+->\s+([\/\w]+)$/) {
-                var rootPath = String(match.1)
-                var realPath = String(match.2)
-                if !realPath.starts(with: "/") { realPath = "/\(realPath)" }
-                if !rootPath.starts(with: "/") { rootPath = "/\(rootPath)" }
-                ret[realPath] = rootPath
+        // /etc/synthetic.conf is not readable, but the links in / are
+        let fm = FileManager.default
+        var links: [(name: String, destination: String)] = []
+        for name in try fm.contentsOfDirectory(atPath: "/") {
+            if let destination = try? fm.destinationOfSymbolicLink(atPath: "/" + name) {
+                links.append((name, destination))
             }
         }
-        
-        return ret
+        return Self.rootSymlinkMap(from: links)
     }
-    
+
     func listLocalVolumes() async throws -> [LocalVolume] {
 
         let rootSymlinks = try await readRootSymlinks()
 
-        print("rootSymlinks \(rootSymlinks)")
-        
-        let output = try await diskUtilActor.execute()
-//        print(output)  // printing out the full diskutil output is EXTREMELY verbose
-        let outputLines = output.components(separatedBy: "\n")
+        let keys: [URLResourceKey] = [
+            .volumeNameKey,             // non-localized; keys the persisted records
+            .volumeIsLocalKey,
+            .volumeIsRootFileSystemKey, // identifies which volume is '/'
+            .volumeIsInternalKey,
+            .volumeIsEjectableKey,
+            .volumeIsBrowsableKey,      // used to filter out volumes user shouldn't see
+            .volumeIsReadOnlyKey,
+        ]
+        let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys,
+                                                         options: []) ?? []
 
-        var ret: [LocalVolume]  = []
-        
-        var mountPoint: String?
-        var volumeName: String?
-        var readOnly: String?
+        var ret: [LocalVolume] = []
 
-        for line in outputLines {
-            if line.starts(with: "*******") {
+        for url in urls {
+            do {
+                let values = try url.resourceValues(forKeys: Set(keys))
+                guard values.volumeIsLocal == true,
+                      values.volumeIsBrowsable == true,
+                      let isRoot = values.volumeIsRootFileSystem,
+                      let volumeName = values.volumeName
+                else { continue }
+                // the sealed system volume is read only but must be listed
+                if values.volumeIsReadOnly == true && !isRoot { continue }
 
-                if let mountPoint,
-                   let readOnly,
-                   readOnly == "No",
-                   let volumeName
-                {
-                    do {
-                        let volumeInfo = try VolumeInfo(for: mountPoint)
-                        // the user visible mount point is still a valid path,
-                        // but may be a symlink or such, so we can't query at that
-                        // path for volume size, have to use the real mountPoint for that
-                        var userVisibleMountPoint = mountPoint
-                        
-                        if volumeInfo.isBrowsable {
-                            if volumeInfo.isRootFileSystem {
-                                userVisibleMountPoint = "/"
-                            } else if let rootSymlink = rootSymlinks[userVisibleMountPoint] {
-                                userVisibleMountPoint = rootSymlink
-                            }
-                            ret.append(LocalVolume(name: volumeName,
-                                                   mountPoint: mountPoint,
-                                                   userVisibleMountPoint: userVisibleMountPoint,
-                                                   isInternal: volumeInfo.isInternal,
-                                                   isEjectable: volumeInfo.isEjectable))
-                        }
-                    } catch {
-                        print("error \(error)")
-                    }
+                let mountPoint = url.path
+                // the user visible mount point is still a valid path,
+                // but may be a symlink or such, so we can't query at that
+                // path for volume size, have to use the real mountPoint for that
+                var userVisibleMountPoint = mountPoint
+                if isRoot {
+                    userVisibleMountPoint = "/"
+                } else if let rootSymlink = rootSymlinks[mountPoint] {
+                    userVisibleMountPoint = rootSymlink
                 }
-                mountPoint = nil
-                readOnly = nil
-            } else if let match = line.firstMatch(of: /^\s+([^:]+):\s+(.*)$/) {
-                let name = match.1
-                let value = match.2
-
-                /*
-                 if something is part of whole, then we need to gather all things that are
-                 also part of that whole.
-                 */
-                
-                // Part of Whole
-                // Whole / Yes/No
-                if let _ = name.firstMatch(of: /Mount Point/) {
-                    mountPoint = String(value)
-                } else if let _ = name.firstMatch(of: /Media Read-Only/) {
-                    readOnly = String(value)
-                } else if let _ = name.firstMatch(of: /Volume Name/) {
-                    volumeName = String(value)
-                }
+                ret.append(LocalVolume(name: volumeName,
+                                       mountPoint: mountPoint,
+                                       userVisibleMountPoint: userVisibleMountPoint,
+                                       isInternal: values.volumeIsInternal ?? false,
+                                       isEjectable: values.volumeIsEjectable ?? false))
+            } catch {
+                print("error \(error)")
             }
         }
         self.volumes = ret
@@ -376,20 +306,58 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
         if let networkSizeOverride {
             return try await networkSizeOverride(volume, timestamp)
         }
-        if dfActors[volume] == nil {
-            // arguments go straight to the process, no shell, so no quoting
-            dfActors[volume] = ShellActor("df", arguments: ["-k", volume.localMount])
+        // one outstanding probe per mount: a hung mount keeps its thread
+        // blocked in the kernel, don't pile more on top of it
+        let path = volume.localMount
+        guard inFlightProbes.begin(path) else {
+            throw "previous probe of \(path) still blocked"
         }
-        guard let duActor = dfActors[volume]
-        else { throw "no df actor found for volume \(volume.localMount)" }
-
-        let result = try await duActor.execute(timeout: dfTimeoutSeconds)
-
-        if let ret = SizeInfo(dfOutput: result, timestamp: timestamp) {
-            return ret
+        let inFlight = inFlightProbes
+        let probe = networkProbeOverride
+        let timeout = dfTimeoutSeconds
+        return try await withCheckedThrowingContinuation { continuation in
+            let once = ResumeOnce(continuation)
+            DispatchQueue.global().async {
+                let size: SizeInfo?
+                if let probe {
+                    size = probe(path, timestamp)
+                } else {
+                    var fs = statfs()
+                    size = statfs(path, &fs) == 0 ? SizeInfo(statfs: fs, timestamp: timestamp) : nil
+                }
+                inFlight.end(path)
+                once.resume(.success(size))
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                once.resume(.failure("timed out reading \(path)"))
+            }
         }
+    }
+}
 
-        return nil
+final class InFlightProbes: @unchecked Sendable {
+    private let lock = NSLock()
+    private var paths: Set<String> = []
+    func begin(_ path: String) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return paths.insert(path).inserted
+    }
+    func end(_ path: String) {
+        lock.lock(); defer { lock.unlock() }
+        paths.remove(path)
+    }
+}
+
+final class ResumeOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<SizeInfo?, any Error>?
+    init(_ c: CheckedContinuation<SizeInfo?, any Error>) { continuation = c }
+    func resume(_ result: Result<SizeInfo?, any Error>) {
+        lock.lock()
+        let c = continuation
+        continuation = nil
+        lock.unlock()
+        c?.resume(with: result)
     }
 }
 

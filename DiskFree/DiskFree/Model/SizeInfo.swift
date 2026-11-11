@@ -37,35 +37,17 @@ public struct SizeInfo: Sendable,
         self.timestamp = timestamp
     }
 
-    // size info from df output
-    init?(dfOutput: String, timestamp: TimeInterval) {
-        /*
-         expects this kind of string:
-           
-Filesystem    1024-blocks       Used Available Capacity iused      ifree %iused  Mounted on
-/dev/disk14s2  3906870272 3582336656 324533616    92%   97180 4294870099    0%   /Volumes/op
-//admin@beast.local/root  5809283456 642511216 5166772240    12% 160627802 1291693060   11%   /System/Volumes/Data/mnt/root
-         */
-
-        // total, used and available blocks followed by the capacity percent;
-        // the Filesystem column can be anything so it is not matched
-        let regex = /\s(\d+)\s+(\d+)\s+(\d+)\s+\d+%/
-
-        let lines = dfOutput.components(separatedBy: "\n")
-        if lines.count > 1,
-           let match = lines[1].firstMatch(of: regex),
-           let match1 = Int(match.1),
-           let match2 = Int(match.2),
-           let match3 = Int(match.3)
-        {
-            self.totalCapacity = match1*1024
-            //self.usedSize_k = match2
-            self.opportunisticCapacity = match3*1024
-            self.importantCapacity = match3*1024
-            self.timestamp = timestamp
-        } else {
-            return nil
-        }
+    // size info from statfs (used for network volumes)
+    init?(statfs fs: statfs, timestamp: TimeInterval) {
+        let bsize = UInt64(fs.f_bsize)
+        let (total, o1) = UInt64(fs.f_blocks).multipliedReportingOverflow(by: bsize)
+        let (free, o2) = UInt64(fs.f_bavail).multipliedReportingOverflow(by: bsize)
+        guard !o1, !o2, total > 0, total <= UInt64(Int.max), free <= UInt64(Int.max)
+        else { return nil }
+        self.totalCapacity = Int(total)
+        self.importantCapacity = Int(free)
+        self.opportunisticCapacity = Int(free)
+        self.timestamp = timestamp
     }
 
     // size info for local volume at file system path

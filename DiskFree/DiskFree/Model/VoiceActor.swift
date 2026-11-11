@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 // talk to this global actor directly if you want to know when the speaking ends
 public let voiceActor = VoiceActor()
@@ -10,6 +11,48 @@ public func say(_ message: String, as voice: VoiceActor.Voice = .Flo) {
             try await voiceActor.say(message, as: voice)
         } catch {
             print("unable to say: \(message): because of error \(error)")
+        }
+    }
+}
+
+// NSSpeechSynthesizer is used rather than AVSpeechSynthesizer because most
+// of the Voice cases (Albert, Bells, Trinoids, Zarvox...) are novelty voices
+// that AVSpeechSynthesizer does not expose.
+@MainActor
+final class Speaker: NSObject, NSSpeechSynthesizerDelegate {
+    static let shared = Speaker()
+
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    private static func voiceIdentifier(named name: String) -> NSSpeechSynthesizer.VoiceName? {
+        for id in NSSpeechSynthesizer.availableVoices {
+            let attrs = NSSpeechSynthesizer.attributes(forVoice: id)
+            if attrs[.name] as? String == name { return id }
+        }
+        return nil
+    }
+
+    func speak(_ message: String, voiceName: String) async {
+        let synth = NSSpeechSynthesizer(voice: Self.voiceIdentifier(named: voiceName))
+            ?? NSSpeechSynthesizer()
+        synth.delegate = self
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            self.continuation = c
+            if !synth.startSpeaking(message) {
+                self.continuation = nil
+                c.resume()
+            }
+        }
+        synth.delegate = nil
+    }
+
+    nonisolated func speechSynthesizer(_ sender: NSSpeechSynthesizer,
+                                       didFinishSpeaking finishedSpeaking: Bool)
+    {
+        Task { @MainActor in
+            let c = self.continuation
+            self.continuation = nil
+            c?.resume()
         }
     }
 }
@@ -31,11 +74,7 @@ public actor VoiceActor {
             let (nextMessage, nextVoice) = self.messageQueue[0]
             self.messageQueue.removeFirst(1)
             
-            let shellActor = ShellActor("say",
-                                        arguments: ["-v",
-                                                    nextVoice.rawValue,
-                                                    "'\(nextMessage)'"])
-            _ = try await shellActor.execute()
+            await Speaker.shared.speak(nextMessage, voiceName: nextVoice.rawValue)
         }
         
         self.isTalkingNow = false

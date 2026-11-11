@@ -29,25 +29,48 @@ public struct NetworkVolume: Sendable,
         self.type = type
     }
 
-    //admin@beast.local/root on /System/Volumes/Data/mnt/root (afpfs, nodev, nosuid, automounted, nobrowse, mounted by brian)
-    public init?(from mountOutputLine: String) {
-        if let match = mountOutputLine.firstMatch(of: /^\/\/(?:([^@\s]+)@)?([^\/\s]+)(\/\S*)?\s+on\s+(.+?)\s+\((\w+)/) {
-            self.username = match.1.map(String.init) ?? ""
-            self.remoteHost = String(match.2)
-            self.remotePath = match.3.map(String.init) ?? ""
-            self.id = UUID()
-            let localMount = String(match.4) // remove /System/Volumes/Data 
-            let undesiredStartString = "/System/Volumes/Data"
-            if localMount.starts(with: undesiredStartString) {
-                self.localMount = String(localMount.dropFirst(undesiredStartString.count))
-            } else {
-                self.localMount = localMount
-            }
-            self.type = String(match.5)
+    // from statfs: f_mntfromname looks like //admin@beast.local/root,
+    // f_mntonname like /System/Volumes/Data/mnt/root, f_fstypename like afpfs
+    public init?(mountedFrom: String, onPath: String, fsType: String) {
+        guard let match = mountedFrom.firstMatch(of: /^\/\/(?:([^@\s]+)@)?([^\/\s]+)(\/\S*)?$/)
+        else { return nil }
+        self.username = match.1.map(String.init) ?? ""
+        self.remoteHost = String(match.2)
+        self.remotePath = match.3.map(String.init) ?? ""
+        self.id = UUID()
+        let undesiredStartString = "/System/Volumes/Data"
+        if onPath.starts(with: undesiredStartString + "/") {
+            self.localMount = String(onPath.dropFirst(undesiredStartString.count))
         } else {
-            // no match on this line
-            return nil
+            self.localMount = onPath
         }
+        self.type = fsType
+    }
+
+    public init?(statfs fs: statfs) {
+        var fs = fs
+        let from = withUnsafePointer(to: &fs.f_mntfromname) {
+            $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+        }
+        let on = withUnsafePointer(to: &fs.f_mntonname) {
+            $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+        }
+        let type = withUnsafePointer(to: &fs.f_fstypename) {
+            $0.withMemoryRebound(to: CChar.self, capacity: Int(MFSTYPENAMELEN)) { String(cString: $0) }
+        }
+        self.init(mountedFrom: from, onPath: on, fsType: type)
+    }
+
+    // all currently mounted network filesystems; MNT_NOWAIT so a hung
+    // mount cannot block the listing
+    public static func mounted() -> [NetworkVolume] {
+        let count = getfsstat(nil, 0, MNT_NOWAIT)
+        guard count > 0 else { return [] }
+        var buffer = Array(repeating: statfs(), count: Int(count))
+        let size = Int32(MemoryLayout<statfs>.stride * buffer.count)
+        let n = getfsstat(&buffer, size, MNT_NOWAIT)
+        guard n > 0 else { return [] }
+        return buffer.prefix(Int(n)).compactMap { NetworkVolume(statfs: $0) }
     }
 
   public static func == (lhs: NetworkVolume, rhs: NetworkVolume) -> Bool {
