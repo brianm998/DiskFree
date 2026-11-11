@@ -1,0 +1,9 @@
+# Build output (the project builds into DiskFree/DerivedData; release.sh into .build and dist)
+DiskFree/DerivedData/
+DiskFree/.build/
+dist/
+
+# Xcode's per-user state
+xcuserdata/
+
+.DS_Store
