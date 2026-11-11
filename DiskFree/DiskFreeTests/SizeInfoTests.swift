@@ -67,4 +67,18 @@ struct SizeInfoTests {
         #expect(a != d)
         #expect(a.id == "5.0")
     }
+
+    @Test func hyphenatedHostDf() throws {
+        let line = "//admin@my-nas-2.local/data  1000 400 600    40% 1 2   0%   /Volumes/data"
+        let s = try #require(SizeInfo(dfOutput: Self.header + line, timestamp: 1))
+        #expect(s.totalCapacity == 1000 * 1024)
+        #expect(s.importantCapacity == 600 * 1024)
+    }
+
+    @Test func percentEncodedShareDf() throws {
+        let line = "//brian@nas.local/My%20Share  2000 500 1500    25% 1 2   0%   /Volumes/My Share"
+        let s = try #require(SizeInfo(dfOutput: Self.header + line, timestamp: 1))
+        #expect(s.totalCapacity == 2000 * 1024)
+        #expect(s.importantCapacity == 1500 * 1024)
+    }
 }

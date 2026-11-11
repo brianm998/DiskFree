@@ -36,6 +36,34 @@ struct ManagerTests {
     }
 }
 
+struct NetworkPollTests {
+    func nv(_ mount: String) -> NetworkVolume {
+        NetworkVolume(username: "u", remoteHost: "h", remotePath: "/p", localMount: mount, type: "smbfs")
+    }
+
+    @Test func previouslySeenVolumeStillPolledWhenMissingFromMount() async throws {
+        let a = nv("/Volumes/a"), b = nv("/Volumes/b")
+        let listings = Listings([[a, b], [a]])
+        let m = Manager()
+        await m.setOverrides(
+            mountListing: { await listings.next() },
+            networkSize: { _, ts in
+                SizeInfo(importantCapacity: 1, opportunisticCapacity: 1, totalCapacity: 2, timestamp: ts)
+            })
+        _ = try await m.recordNetworkVolumeSizes()
+        let (vols, records) = try await m.recordNetworkVolumeSizes()
+        #expect(vols.map(\.localMount) == ["/Volumes/a", "/Volumes/b"])
+        #expect(records["/Volumes/b"]?.count == 2)
+        #expect(records["/Volumes/a"]?.count == 2)
+    }
+}
+
+actor Listings {
+    var items: [[NetworkVolume]]
+    init(_ items: [[NetworkVolume]]) { self.items = items }
+    func next() -> [NetworkVolume] { items.isEmpty ? [] : items.removeFirst() }
+}
+
 @MainActor
 struct ReconcileTests {
     func vol(_ name: String, _ path: String) -> LocalVolume {

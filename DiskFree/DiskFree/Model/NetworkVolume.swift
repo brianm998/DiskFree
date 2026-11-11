@@ -31,10 +31,10 @@ public struct NetworkVolume: Sendable,
 
     //admin@beast.local/root on /System/Volumes/Data/mnt/root (afpfs, nodev, nosuid, automounted, nobrowse, mounted by brian)
     public init?(from mountOutputLine: String) {
-        if let match = mountOutputLine.firstMatch(of: /^\/\/(\w+)@([\w.]+)([\/\w]*)\s+on\s+([\/\w]+)\s+\((\w+)/) {
-            self.username = String(match.1)
+        if let match = mountOutputLine.firstMatch(of: /^\/\/(?:([^@\s]+)@)?([^\/\s]+)(\/\S*)?\s+on\s+(.+?)\s+\((\w+)/) {
+            self.username = match.1.map(String.init) ?? ""
             self.remoteHost = String(match.2)
-            self.remotePath = String(match.3)
+            self.remotePath = match.3.map(String.init) ?? ""
             self.id = UUID()
             let localMount = String(match.4) // remove /System/Volumes/Data 
             let undesiredStartString = "/System/Volumes/Data"
