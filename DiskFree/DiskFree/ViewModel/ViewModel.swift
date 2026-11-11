@@ -536,9 +536,9 @@ public final class ViewModel {
     }
 
     /// number of polls between local volume re-discovery (about once a minute)
-    nonisolated static func rediscoveryPollCount(pollIntervalSeconds: TimeInterval) -> Int {
+    nonisolated static func rediscoveryPollCount(pollIntervalSeconds: Int) -> Int {
         guard pollIntervalSeconds > 0 else { return 1 }
-        return max(1, Int((60.0 / pollIntervalSeconds).rounded(.up)))
+        return max(1, Int((60.0 / Double(pollIntervalSeconds)).rounded(.up)))
     }
 
     /// Merge freshly discovered volumes into localVolumes, by name.  Existing view
