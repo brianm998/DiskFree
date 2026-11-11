@@ -121,18 +121,21 @@ public final class ViewModel {
                         }
                     }
                   
-                    try Task.checkCancellation()
-                    if !isFirst {
-                      let seconds = await MainActor.self.run { self.preferences.networkPollIntervalSeconds }
-                        
-                        // don't sleep the first time so the graph updates quicker
-                        try await Task.sleep(nanoseconds: UInt64(seconds*1_000_000_000))
-                    }
-                    try Task.checkCancellation()
-                    isFirst = false 
+                } catch is CancellationError {
+                    return
                 } catch {
                     print("ERROR: \(error)")
                 }
+
+                if Task.isCancelled { return }
+                // don't sleep the first time so the graph updates quicker
+                if !isFirst {
+                    let seconds = await MainActor.run { self.preferences.networkPollIntervalSeconds }
+                    do {
+                        try await Task.sleep(nanoseconds: UInt64(max(seconds, 0)*1_000_000_000))
+                    } catch { return }
+                }
+                isFirst = false
             }
         }
     }
@@ -494,23 +497,64 @@ public final class ViewModel {
     private func startLocalVolumeTask() {
         self.localVolumeTask = Task.detached {
             var isFirst = true
+            var pollCount = 0
             // then iterate until we are cancelled
             while(true) {
                 do {
-                  await self.localRecordViewUpdate(records: try await self.manager.recordLocalVolumeSizes())
-
-                    try Task.checkCancellation()
-                    if !isFirst {
-                      let seconds = await MainActor.run { self.preferences.localPollIntervalSeconds }
-                        
-                        // don't sleep the first time so the graph updates quicker
-                        try await Task.sleep(nanoseconds: UInt64(seconds*1_000_000_000))
-                    }
-                    try Task.checkCancellation()
-                    isFirst = false 
+                    await self.localRecordViewUpdate(records: try await self.manager.recordLocalVolumeSizes())
+                } catch is CancellationError {
+                    return
                 } catch {
                     print("ERROR: \(error)")
                 }
+
+                if Task.isCancelled { return }
+                let seconds = await MainActor.run { self.preferences.localPollIntervalSeconds }
+
+                // don't sleep the first time so the graph updates quicker
+                if !isFirst {
+                    do {
+                        try await Task.sleep(nanoseconds: UInt64(max(seconds, 0)*1_000_000_000))
+                    } catch { return }
+                }
+                isFirst = false
+
+                // periodically re-discover local volumes
+                pollCount += 1
+                let every = Self.rediscoveryPollCount(pollIntervalSeconds: seconds)
+                if pollCount >= every {
+                    pollCount = 0
+                    do {
+                        let volumes = try await self.manager.listLocalVolumes()
+                        await MainActor.run { self.reconcileLocalVolumes(with: volumes) }
+                    } catch {
+                        print("ERROR re-listing local volumes: \(error)")
+                    }
+                }
+            }
+        }
+    }
+
+    /// number of polls between local volume re-discovery (about once a minute)
+    nonisolated static func rediscoveryPollCount(pollIntervalSeconds: Int) -> Int {
+        guard pollIntervalSeconds > 0 else { return 1 }
+        return max(1, Int((60.0 / Double(pollIntervalSeconds)).rounded(.up)))
+    }
+
+    /// Merge freshly discovered volumes into localVolumes, by name.  Existing view
+    /// models are kept (with the new volume value); new volumes are appended;
+    /// volumes no longer present are left in place.
+    func reconcileLocalVolumes(with volumes: [LocalVolume]) {
+        for volume in volumes {
+            if let existing = localVolumes.first(where: { $0.volume.name == volume.name }) {
+                // LocalVolume equality is by name only, so always replace
+                existing.volume = .local(volume)
+            } else {
+                let vm = VolumeViewModel(volume: volume,
+                                         color: lineColors[localVolumes.count % lineColors.count],
+                                         preferences: preferences)
+                vm.isSelected = preferences.localVolumesToShow.contains(volume.name)
+                localVolumes.append(vm)
             }
         }
     }

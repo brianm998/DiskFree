@@ -90,6 +90,10 @@ public actor Manager: Sendable {
 
     let diskUtilActor = ShellActor("diskutil", arguments: ["info", "-all"])
 
+    func set(volumes: [LocalVolume]) {
+        self.volumes = volumes
+    }
+
     func set(maxDataAgeMinutes: TimeInterval) {
         self.maxDataAgeMinutes = maxDataAgeMinutes
     }
@@ -310,18 +314,13 @@ lrwxr-xr-x@   1 root  wheel    11 Sep  5 13:54 var -> private/var
         // instead of having them be very slightly different
         let timestamp = Date().timeIntervalSince1970
         for volume in volumes {
-            //print("record size of \(volume.name)")
-            if let sizeOfVolume = try self.sizeOf(volume: volume, at: timestamp) {
-                if var existingList = localVolumeSizes[volume.name] {
-                    //print("appending to volume list localVolumeSizes[\(volume.name)].count = \(localVolumeSizes[volume.name]?.count ?? -1)")
-
-                    existingList.append(sizeOfVolume)  
-                    localVolumeSizes[volume.name] = existingList
-                    //print("appending to volume list localVolumeSizes[\(volume.name)].count = \(localVolumeSizes[volume.name]?.count ?? -1)")
-                } else {
-                    //print("NOT appending to volume list localVolumeSizes[\(volume.name)]")
-                    localVolumeSizes[volume.name] = [sizeOfVolume]
+            // one failing volume must not stop the others from being sampled
+            do {
+                if let sizeOfVolume = try self.sizeOf(volume: volume, at: timestamp) {
+                    localVolumeSizes[volume.name, default: []].append(sizeOfVolume)
                 }
+            } catch {
+                print("error querying size of \(volume.name) at \(volume.mountPoint): \(error)")
             }
         }
 
