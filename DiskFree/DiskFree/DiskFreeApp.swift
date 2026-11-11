@@ -9,6 +9,16 @@ import SwiftUI
 
 @main
 struct DiskFreeApp: App {
+    init() {
+        // Offscreen screenshot rendering: handled before any scene exists,
+        // so no window is ever created, shown or activated.
+        if let dir = ScreenshotRenderer.outputDirectory() {
+            NSApplication.shared.setActivationPolicy(.prohibited)
+            let ok = MainActor.assumeIsolated { ScreenshotRenderer.render(to: dir) }
+            exit(ok ? 0 : 1)
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
