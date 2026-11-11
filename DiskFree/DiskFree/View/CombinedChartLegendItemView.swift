@@ -28,74 +28,51 @@ struct CombinedChartLegendItemView: View {
         }
     }
     
-    var changeArrow: some View {
-        Group {
-            if volumeView.shouldShowChange {
-                switch volumeView.direction {
-                case .equal:
-                    HStack { Text("") }
-                      .frame(minWidth: 50)
-
-                case .up:
-                    Image(systemName: "arrow.up")
-                      .resizable()
-                      .aspectRatio(contentMode: .fit)
-                      .foregroundColor(.green)
-                      .frame(width: viewModel.preferences.legendFontSize*0.65,
-                             height: viewModel.preferences.legendFontSize*0.65)
-                      .frame(minWidth: 50)
-                case .down:
-                    Image(systemName: "arrow.down")
-                      .resizable()
-                      .aspectRatio(contentMode: .fit)
-                      .foregroundColor(.red)
-                      .opacity(0.7)
-                      .frame(width: viewModel.preferences.legendFontSize*0.65,
-                             height: viewModel.preferences.legendFontSize*0.65)
-                }
-            } else {
-                HStack { Text("") }
-                  .frame(minWidth: viewModel.preferences.legendFontSize*0.65)
-            }
-        }
+    // size helpers: independent of direction / shouldShowChange so the
+    // legend grid columns never resize
+    static func arrowSize(fontSize: Double) -> Double {
+        fontSize * 0.65
     }
-    
+
+    static func rateFontSize(fontSize: Double) -> Double {
+        fontSize / 2.5
+    }
+
+    // wide enough for four digits plus "mb/s" at the rate font size
+    static func rateColumnWidth(fontSize: Double) -> Double {
+        rateFontSize(fontSize: fontSize) * 5.0
+    }
+
+    var changeColor: Color {
+        volumeView.direction == .down ? .red : .green
+    }
+
+    var showsChange: Bool {
+        volumeView.shouldShowChange && volumeView.direction != .equal
+    }
+
+    var changeArrow: some View {
+        let size = Self.arrowSize(fontSize: viewModel.preferences.legendFontSize)
+        return Image(systemName: volumeView.direction == .down ? "arrow.down" : "arrow.up")
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .foregroundColor(changeColor)
+          .opacity(showsChange ? (volumeView.direction == .down ? 0.7 : 1) : 0)
+          .frame(width: size, height: size)
+    }
+
     var volumeChange: some View {
-        Group {
-            if volumeView.shouldShowChange {
-                switch volumeView.direction {
-                case .equal:
-                    HStack { Text("") }
-                      .frame(minWidth: 50)
-                    
-                case .up:
-                    VStack(alignment: .leading) {
-                        Text(volumeView.change)
-                          .foregroundColor(.green)
-                          .font(.system(size: viewModel.preferences.legendFontSize/2.5))
-                        Text(volumeView.change2)
-                          .foregroundColor(.green)
-                          .font(.system(size: viewModel.preferences.legendFontSize/2.5))
-                    }
-                    
-                      .animation(.easeInOut, value: volumeView.direction)
-                      .frame(minWidth: 50)
-                case .down:
-                    VStack(alignment: .leading)  {
-                        Text(volumeView.change)
-                          .foregroundColor(.red)
-                          .font(.system(size: viewModel.preferences.legendFontSize/2.5))
-                        Text(volumeView.change2)
-                          .foregroundColor(.red)
-                          .font(.system(size: viewModel.preferences.legendFontSize/2.5))
-                    }
-                      .animation(.easeInOut, value: volumeView.direction)
-                }
-            } else {
-                HStack { Text("") }
-                  .frame(minWidth: 30)
-            }
+        let fs = viewModel.preferences.legendFontSize
+        let font = Font.system(size: Self.rateFontSize(fontSize: fs)).monospacedDigit()
+        return VStack(alignment: .leading) {
+            Text(showsChange ? volumeView.change : "0000")
+              .font(font)
+            Text(showsChange ? volumeView.change2 : "mb/s")
+              .font(font)
         }
+          .foregroundColor(changeColor)
+          .opacity(showsChange ? 1 : 0)
+          .frame(width: Self.rateColumnWidth(fontSize: fs), alignment: .leading)
     }
 
     var percentFullVisual: some View {
