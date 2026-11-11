@@ -1,0 +1,10 @@
+# Written by `mason init`: what each suite showed when it was run once, before any task.
+# Informational. Re-run `mason init --force --suites accept` to refresh it.
+
+[suite.swift]
+executed = 1
+passed = 1
+failed = 0
+skipped = 0
+seconds = 31.8
+green = true
