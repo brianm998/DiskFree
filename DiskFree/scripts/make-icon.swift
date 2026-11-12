@@ -1,73 +1,75 @@
 #!/usr/bin/env swift
-// Generates the Disk Free app icon PNGs and Contents.json.
+// Generates the Disk Free app icon PNGs from DiskFree/art/AppIcon-source.png.
+// Contents.json in the appiconset is maintained by hand and is not touched.
 // Usage: swift DiskFree/scripts/make-icon.swift [output-dir]
 import AppKit
 import CoreGraphics
 import Foundation
 
-let defaultDir = URL(fileURLWithPath: #filePath)
-    .deletingLastPathComponent().deletingLastPathComponent()
-    .appendingPathComponent("DiskFree/Assets.xcassets/AppIcon.appiconset").path
+let scriptsDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+let rootDir = scriptsDir.deletingLastPathComponent()
+let defaultDir = rootDir.appendingPathComponent("DiskFree/Assets.xcassets/AppIcon.appiconset").path
 let outDir = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : defaultDir
+let sourceURL = rootDir.appendingPathComponent("art/AppIcon-source.png")
 
 let srgb = CGColorSpace(name: CGColorSpace.sRGB)!
-func col(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat = 1) -> CGColor {
-    CGColor(colorSpace: srgb, components: [r, g, b, a])!
+
+func fail(_ msg: String) -> Never {
+    FileHandle.standardError.write(Data("make-icon: \(msg)\n".utf8))
+    exit(1)
 }
 
-func draw(_ ctx: CGContext, size s: CGFloat) {
-    let u = s / 1024
-    // macOS grid: 824pt tile centred in 1024 canvas.
-    let tile = CGRect(x: 100 * u, y: 100 * u, width: 824 * u, height: 824 * u)
-    let tilePath = CGPath(roundedRect: tile, cornerWidth: 185 * u, cornerHeight: 185 * u, transform: nil)
-    // Shadow + tile gradient
-    ctx.saveGState()
-    ctx.setShadow(offset: CGSize(width: 0, height: -12 * u), blur: 24 * u, color: col(0, 0, 0, 0.35))
-    ctx.addPath(tilePath); ctx.setFillColor(col(0.2, 0.22, 0.28)); ctx.fillPath()
-    ctx.restoreGState()
-    ctx.saveGState()
-    ctx.addPath(tilePath); ctx.clip()
-    let bg = CGGradient(colorsSpace: srgb, colors: [col(0.30, 0.33, 0.42), col(0.10, 0.11, 0.16)] as CFArray, locations: [0, 1])!
-    ctx.drawLinearGradient(bg, start: CGPoint(x: 0, y: tile.maxY), end: CGPoint(x: 0, y: tile.minY), options: [])
-    ctx.restoreGState()
+guard let src = CGImageSourceCreateWithURL(sourceURL as CFURL, nil),
+      let image = CGImageSourceCreateImageAtIndex(src, 0, nil) else { fail("cannot read \(sourceURL.path)") }
+let W = image.width, H = image.height
 
-    let c = CGPoint(x: 512 * u, y: 512 * u)
-    // Platter
-    let pr = 270 * u
-    ctx.setFillColor(col(0.88, 0.90, 0.94))
-    ctx.fillEllipse(in: CGRect(x: c.x - pr, y: c.y - pr, width: pr * 2, height: pr * 2))
-    ctx.setFillColor(col(0.10, 0.11, 0.16))
-    let ir = 205 * u
-    ctx.fillEllipse(in: CGRect(x: c.x - ir, y: c.y - ir, width: ir * 2, height: ir * 2))
-    // Gauge arc: used (blue -> red) around a ring, remainder dim.
-    let ringR = 235 * u, lw = 56 * u
-    ctx.setLineWidth(lw); ctx.setLineCap(.round)
-    let start = CGFloat.pi / 2          // top
-    let total = CGFloat.pi * 2
-    ctx.setStrokeColor(col(0.25, 0.27, 0.34))
-    ctx.addArc(center: c, radius: ringR - 0, startAngle: 0, endAngle: total, clockwise: false)
-    ctx.strokePath()
-    let steps = 90
-    let used: CGFloat = 0.72
-    for i in 0..<steps {
-        let t0 = CGFloat(i) / CGFloat(steps), t1 = CGFloat(i + 1) / CGFloat(steps)
-        let f = t0
-        ctx.setStrokeColor(col(0.15 + 0.80 * f, 0.50 - 0.30 * f, 1.0 - 0.80 * f))
-        ctx.setLineCap(i == 0 ? .round : .butt)
-        ctx.addArc(center: c, radius: ringR, startAngle: start - t0 * used * total,
-                   endAngle: start - (t1 * used * total) - 0.004, clockwise: true)
-        ctx.strokePath()
+// Find the tile's bounding box: pixels that are not near-black.
+func tileBounds() -> CGRect {
+    var buf = [UInt8](repeating: 0, count: W * H * 4)
+    let ctx = CGContext(data: &buf, width: W, height: H, bitsPerComponent: 8, bytesPerRow: W * 4,
+                        space: srgb, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    ctx.draw(image, in: CGRect(x: 0, y: 0, width: W, height: H))
+    var minX = W, minY = H, maxX = -1, maxY = -1
+    for y in 0..<H {
+        for x in 0..<W {
+            let i = (y * W + x) * 4
+            if max(buf[i], buf[i + 1], buf[i + 2]) > 40 {
+                if x < minX { minX = x }; if x > maxX { maxX = x }
+                if y < minY { minY = y }; if y > maxY { maxY = y }
+            }
+        }
     }
-    // Spindle hub and arm
-    ctx.setFillColor(col(0.88, 0.90, 0.94))
-    let hr = 60 * u
-    ctx.fillEllipse(in: CGRect(x: c.x - hr, y: c.y - hr, width: hr * 2, height: hr * 2))
-    ctx.setFillColor(col(0.10, 0.11, 0.16))
-    let dr = 22 * u
-    ctx.fillEllipse(in: CGRect(x: c.x - dr, y: c.y - dr, width: dr * 2, height: dr * 2))
+    if maxX < 0 { fail("no tile found in source") }
+    // Buffer rows are top-first; return in image (top-left origin) coordinates.
+    return CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
+}
+let box = tileBounds()
+let inset: CGFloat = 6   // source pixels, to drop anti-aliased black fringe
+
+func render(_ ctx: CGContext, size s: CGFloat) {
+    let u = s / 1024
+    // macOS grid: 824 tile centred in a 1024 canvas.
+    let tile = CGRect(x: 100 * u, y: 100 * u, width: 824 * u, height: 824 * u)
+    let scale = tile.width / box.width
+    // Clip rect in source coordinates (bottom-left origin).
+    let clipSrc = CGRect(x: box.minX + inset, y: CGFloat(H) - box.maxY + inset,
+                         width: box.width - 2 * inset, height: box.height - 2 * inset)
+    let radius = (185.0 / 824.0) * box.width - inset
+    ctx.saveGState()
+    ctx.setShadow(offset: CGSize(width: 0, height: -12 * u), blur: 24 * u,
+                  color: CGColor(colorSpace: srgb, components: [0, 0, 0, 0.35])!)
+    ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+    ctx.translateBy(x: tile.minX, y: tile.minY)
+    ctx.scaleBy(x: scale, y: scale)
+    ctx.translateBy(x: -box.minX, y: -(CGFloat(H) - box.maxY))
+    ctx.addPath(CGPath(roundedRect: clipSrc, cornerWidth: radius, cornerHeight: radius, transform: nil))
+    ctx.clip()
+    ctx.draw(image, in: CGRect(x: 0, y: 0, width: W, height: H))
+    ctx.endTransparencyLayer()
+    ctx.restoreGState()
 }
 
-func png(size: Int) -> Data {
+func makePNG(size: Int) -> Data {
     let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size,
                                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 32)!
@@ -77,21 +79,39 @@ func png(size: Int) -> Data {
                         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
     ctx.interpolationQuality = .high
     ctx.setShouldAntialias(true)
-    draw(ctx, size: CGFloat(size))
+    render(ctx, size: CGFloat(size))
     return bmp.representation(using: .png, properties: [:])!
 }
 
+// Self-check: exact pixel size, alpha channel, transparent corners, opaque centre.
+func check(_ url: URL, px: Int) {
+    guard let s = CGImageSourceCreateWithURL(url as CFURL, nil),
+          let img = CGImageSourceCreateImageAtIndex(s, 0, nil) else { fail("cannot reread \(url.lastPathComponent)") }
+    if img.width != px || img.height != px { fail("\(url.lastPathComponent) is \(img.width)x\(img.height), expected \(px)") }
+    switch img.alphaInfo {
+    case .none, .noneSkipFirst, .noneSkipLast: fail("\(url.lastPathComponent) has no alpha channel")
+    default: break
+    }
+    let rep = NSBitmapImageRep(cgImage: img)
+    func alpha(_ x: Int, _ y: Int) -> CGFloat { rep.colorAt(x: x, y: y)?.alphaComponent ?? -1 }
+    if px == 1024 {
+        for (x, y) in [(0, 0), (px - 1, 0), (0, px - 1), (px - 1, px - 1)] where alpha(x, y) != 0 {
+            fail("corner (\(x),\(y)) of \(url.lastPathComponent) is not transparent")
+        }
+        if alpha(512, 512) != 1 { fail("centre of \(url.lastPathComponent) is not opaque") }
+    }
+}
+
 try FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
-var images: [[String: String]] = []
+var count = 0
 for base in [16, 32, 128, 256, 512] {
     for scale in [1, 2] {
         let px = base * scale
         let name = "icon_\(base)x\(base)\(scale == 2 ? "@2x" : "").png"
-        try png(size: px).write(to: URL(fileURLWithPath: outDir).appendingPathComponent(name))
-        images.append(["filename": name, "idiom": "mac", "scale": "\(scale)x", "size": "\(base)x\(base)"])
+        let url = URL(fileURLWithPath: outDir).appendingPathComponent(name)
+        try makePNG(size: px).write(to: url)
+        check(url, px: px)
+        count += 1
     }
 }
-let json: [String: Any] = ["images": images, "info": ["author": "xcode", "version": 1]]
-let data = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
-try data.write(to: URL(fileURLWithPath: outDir).appendingPathComponent("Contents.json"))
-print("Wrote \(images.count) icons to \(outDir)")
+print("Wrote \(count) icons to \(outDir)")
