@@ -76,5 +76,27 @@ missing secret is only a notice.
 
 1. Register the App ID `com.DiskFree` (Certificates, Identifiers & Profiles).
 2. Create the app record in App Store Connect (name, bundle ID, SKU, category, privacy details, screenshots).
-3. Run the release workflow so the build uploads; wait for processing to finish.
+3. Run the release workflow so the build uploads. With `TESTFLIGHT_GROUPS` set (see below) it also waits for processing and hands the build to TestFlight.
 4. In App Store Connect, select the uploaded build on the version page and submit it for review.
+
+### TestFlight
+
+After a real upload (not validate-only), the `app-store` job runs
+`DiskFree/scripts/testflight.py` when the repository **variable**
+`TESTFLIGHT_GROUPS` is set: a comma-separated list of TestFlight group names
+(e.g. `Internal,Beta Testers`). With it unset the step is skipped. The script
+waits up to 30 minutes for processing, sets "What to Test" (en-US) from the tag
+message or the commit subjects since the previous `release/*` tag, adds the
+build to each group and, if any group is external, submits the build for Beta
+App Review (skipped if a submission already exists). A group name that does not
+exist fails the step.
+
+The API key (`APPLE_API_KEY_ID`) needs the **App Manager** role (or Admin).
+
+One-time manual setup in App Store Connect:
+
+1. Create the TestFlight groups named in `TESTFLIGHT_GROUPS` (internal and/or external).
+2. For external testing, fill in TestFlight Test Information: beta app
+   description, feedback email, and the beta app review contact.
+
+Run the script's tests with `python3 -m unittest discover DiskFree/scripts`.
