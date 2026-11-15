@@ -24,18 +24,45 @@ final class Speaker: NSObject, NSSpeechSynthesizerDelegate {
 
     private var continuation: CheckedContinuation<Void, Never>?
 
-    private static func voiceIdentifier(named name: String) -> NSSpeechSynthesizer.VoiceName? {
+    /// One synthesizer per voice name ("" = default voice), created lazily and reused.
+    private var synthesizers: [String: NSSpeechSynthesizer] = [:]
+
+    /// voice display name -> identifier. Built once per process (lazy statics are
+    /// thread-safe), outside the main actor. Call `warmVoiceCache()` at launch.
+    nonisolated static let voiceIdentifiers: [String: NSSpeechSynthesizer.VoiceName] = {
+        enumerationCount += 1
+        var map: [String: NSSpeechSynthesizer.VoiceName] = [:]
         for id in NSSpeechSynthesizer.availableVoices {
             let attrs = NSSpeechSynthesizer.attributes(forVoice: id)
-            if attrs[.name] as? String == name { return id }
+            if let name = attrs[.name] as? String, map[name] == nil { map[name] = id }
         }
-        return nil
+        return map
+    }()
+
+    /// Test seam: how many times the voices were enumerated (written only inside
+    /// the once-only initializer above).
+    nonisolated(unsafe) static var enumerationCount = 0
+
+    nonisolated static func warmVoiceCache() {
+        Task.detached(priority: .utility) { _ = voiceIdentifiers }
+    }
+
+    nonisolated static func voiceIdentifier(named name: String) -> NSSpeechSynthesizer.VoiceName? {
+        voiceIdentifiers[name]
+    }
+
+    private func synthesizer(for voiceName: String) -> NSSpeechSynthesizer {
+        if let s = synthesizers[voiceName] { return s }
+        let id = Self.voiceIdentifier(named: voiceName)
+        let s = NSSpeechSynthesizer(voice: id) ?? NSSpeechSynthesizer()
+        s.delegate = self
+        // unknown names share the default synthesizer
+        synthesizers[voiceName] = s
+        return s
     }
 
     func speak(_ message: String, voiceName: String) async {
-        let synth = NSSpeechSynthesizer(voice: Self.voiceIdentifier(named: voiceName))
-            ?? NSSpeechSynthesizer()
-        synth.delegate = self
+        let synth = synthesizer(for: voiceName)
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
             self.continuation = c
             if !synth.startSpeaking(message) {
@@ -43,7 +70,6 @@ final class Speaker: NSObject, NSSpeechSynthesizerDelegate {
                 c.resume()
             }
         }
-        synth.delegate = nil
     }
 
     nonisolated func speechSynthesizer(_ sender: NSSpeechSynthesizer,
