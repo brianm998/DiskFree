@@ -34,7 +34,7 @@ set -e
 
 BUILD_DIR=.build
 APP_NAME=DiskFree
-VERSION="0.8.0"
+VERSION="0.1.1"
 BUILD_NUMBER=""
 SIGN_IDENTITY=""
 NOTARIZE=false
