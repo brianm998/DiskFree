@@ -24,6 +24,15 @@ struct VolumeViewModelTests {
         return m
     }
 
+    @Test @MainActor func sortedIfChangedNilWhenAlreadySorted() {
+        let big = model([sample(free: 1, used: 1)])
+        let small = model([sample(free: 1, used: 1)])
+        big.lastSize = SizeInfo(importantCapacity: 0, opportunisticCapacity: 0, totalCapacity: 2000 * Self.g, timestamp: 0)
+        #expect(ViewModel.sortedIfChanged([big, small]) == nil)
+        let r = ViewModel.sortedIfChanged([small, big])
+        #expect(r?.map(\.id) == [big.id, small.id])
+    }
+
     @Test func changeAmountKBPerSecond() {
         let m = model()
         let old = SizeInfo(importantCapacity: 1000 * 1024, opportunisticCapacity: 0, totalCapacity: 0, timestamp: 10)

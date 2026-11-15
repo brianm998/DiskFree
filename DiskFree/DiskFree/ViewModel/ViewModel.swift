@@ -444,8 +444,10 @@ public final class ViewModel {
                     //print("updating volume \(volume.volume.name) size to \(newSizes.count)")
                 }
             }
-            self.localVolumes.sort {
-                $0.lastSize?.totalSize_k ?? 0 > $1.lastSize?.totalSize_k ?? 0
+            // only assign when the order changed, so Observation doesn't
+            // invalidate every view reading localVolumes on each poll
+            if let sorted = Self.sortedIfChanged(self.localVolumes) {
+                self.localVolumes = sorted
             }
 
             // apply colors here
@@ -454,6 +456,14 @@ public final class ViewModel {
             let endTime = Date().timeIntervalSince1970
             print("view update took \(endTime-startTime) seconds")
         }
+    }
+
+    /// Volumes sorted by total size (largest first), or nil if already in that order.
+    static func sortedIfChanged(_ volumes: [VolumeViewModel]) -> [VolumeViewModel]? {
+        let sorted = volumes.sorted {
+            $0.lastSize?.totalSize_k ?? 0 > $1.lastSize?.totalSize_k ?? 0
+        }
+        return sorted.map(\.id) == volumes.map(\.id) ? nil : sorted
     }
 
     private func applyColors() {

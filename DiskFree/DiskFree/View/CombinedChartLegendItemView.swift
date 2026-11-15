@@ -3,27 +3,27 @@ import Charts
 
 // each row in the combind chart legend
 struct CombinedChartLegendItemView: View {
-    @Environment(ViewModel.self) var viewModel: ViewModel
     @State var volumeView: VolumeViewModel
+    let legendFontSize: Double
 
     var volumeIcon: some View {
         if volumeView.isNetwork {
             Image(systemName: "server.rack")
               .resizable()
-              .frame(width: viewModel.preferences.legendFontSize*0.6,
-                     height: viewModel.preferences.legendFontSize*0.6)
+              .frame(width: legendFontSize*0.6,
+                     height: legendFontSize*0.6)
               .opacity(0.6)
         } else if volumeView.isInternal {
             Image(systemName: "internaldrive")
               .resizable()
-              .frame(width: viewModel.preferences.legendFontSize*0.6,
-                     height: viewModel.preferences.legendFontSize*0.6)
+              .frame(width: legendFontSize*0.6,
+                     height: legendFontSize*0.6)
               .opacity(0.6)
         } else {
             Image(systemName: "externaldrive")
               .resizable()
-              .frame(width: viewModel.preferences.legendFontSize*0.6,
-                     height: viewModel.preferences.legendFontSize*0.6)
+              .frame(width: legendFontSize*0.6,
+                     height: legendFontSize*0.6)
               .opacity(0.6)
         }
     }
@@ -52,7 +52,7 @@ struct CombinedChartLegendItemView: View {
     }
 
     var changeArrow: some View {
-        let size = Self.arrowSize(fontSize: viewModel.preferences.legendFontSize)
+        let size = Self.arrowSize(fontSize: legendFontSize)
         return Image(systemName: volumeView.direction == .down ? "arrow.down" : "arrow.up")
           .resizable()
           .aspectRatio(contentMode: .fit)
@@ -62,7 +62,7 @@ struct CombinedChartLegendItemView: View {
     }
 
     var volumeChange: some View {
-        let fs = viewModel.preferences.legendFontSize
+        let fs = legendFontSize
         let font = Font.system(size: Self.rateFontSize(fontSize: fs)).monospacedDigit()
         return VStack(alignment: .leading) {
             Text(showsChange ? volumeView.change : "0000")
@@ -107,12 +107,12 @@ struct CombinedChartLegendItemView: View {
 
             // text for where volume is mounted
             Text(volumeView.volume.mountPath)
-              .font(.system(size: viewModel.preferences.legendFontSize))
+              .font(.system(size: legendFontSize))
               .foregroundStyle(volumeView.lineColor)
 
             // text for free space available
             Text(volumeView.chartFreeLineText)
-              .font(.system(size: viewModel.preferences.legendFontSize))
+              .font(.system(size: legendFontSize))
               .foregroundStyle(volumeView.weightAdjustedColor)
               .blinking(if: volumeView.showLowSpaceWarning,
                           duration: 0.4)
@@ -121,15 +121,15 @@ struct CombinedChartLegendItemView: View {
 
             // battery like visual of amount left
             self.percentFullVisual
-              .frame(width: viewModel.preferences.legendFontSize/3,
-                     height: viewModel.preferences.legendFontSize)
+              .frame(width: legendFontSize/3,
+                     height: legendFontSize)
               .blinking(if: volumeView.showLowSpaceWarning,
                           duration: 0.4)
 
             if let amountEmpty = volumeView.amountEmpty {
                 // text for free space available
                 Text(String(format: "%d%%", Int(amountEmpty*100)))
-                  .font(.system(size: viewModel.preferences.legendFontSize*0.8))
+                  .font(.system(size: legendFontSize*0.8))
                        .foregroundStyle(volumeView.weightAdjustedColor)
                        .blinking(if: volumeView.showLowSpaceWarning,
                                    duration: 0.4)
