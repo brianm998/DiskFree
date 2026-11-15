@@ -91,6 +91,8 @@ public final class ViewModel {
 
     /// false in tests: skip writing record and preference files
     var persistsToDisk = true
+    /// test seam: the async preference load in init() would overwrite preferences
+    var networkPollIntervalOverride: Int?
 
     func listNetworkVolumes() {
         if networkVolumeTask != nil { return }
@@ -155,7 +157,7 @@ public final class ViewModel {
         } catch {
             print("ERROR: \(error)")
         }
-        return preferences.networkPollIntervalSeconds
+        return networkPollIntervalOverride ?? preferences.networkPollIntervalSeconds
     }
 
     func listLocalVolumes() {

@@ -20,7 +20,7 @@ struct ViewModelPollingTests {
     func makeModel(counter: ProbeCounter) async -> ViewModel {
         let vm = ViewModel()
         vm.persistsToDisk = false
-        vm.preferences.networkPollIntervalSeconds = 0
+        vm.networkPollIntervalOverride = 0
         let v = nv()
         await vm.manager.setProbeOverride({ _, ts in
             counter.hit()
