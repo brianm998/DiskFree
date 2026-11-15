@@ -39,6 +39,10 @@ struct MainView: View {
               viewModel.listLocalVolumes()
               viewModel.listNetworkVolumes()
           }
+          .onDisappear {
+              if viewModel.isDemo { return }
+              viewModel.stopPolling()
+          }
           .padding()
     }
 }

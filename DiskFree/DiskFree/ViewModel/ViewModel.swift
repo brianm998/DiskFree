@@ -114,63 +114,24 @@ public final class ViewModel {
         } + networkVolumes
     }
 
-    func listNetworkVolumes() {
-        self.networkVolumeTask = Task.detached {
+    /// false in tests: skip writing record and preference files
+    var persistsToDisk = true
+    /// test seam: the async preference load in init() would overwrite preferences
+    var networkPollIntervalOverride: Int?
 
-            let storedRecords = await self.manager.loadStoredNetworkVolumeRecords() 
+    func listNetworkVolumes() {
+        if networkVolumeTask != nil { return }
+        let manager = self.manager
+        self.networkVolumeTask = Task.detached { [weak self] in
+            _ = await manager.loadStoredNetworkVolumeRecords()
 
             var isFirst = true
-            // then iterate until we are cancelled
-            while(true) {
-                do {
-                    let (newNetworkVolumes, sizeRecords) =
-                      try await self.manager.recordNetworkVolumeSizes()
-                    
-                    await self.networkRecordViewUpdate(volumes: newNetworkVolumes,
-                                                       records: sizeRecords)
-
-                    /*
-                     reconcile the existing network volumes with new ones
-                     create view models for new network volumes
-                     */
-
-                    await MainActor.run {
-                        for newVolume in newNetworkVolumes {
-                            var isNew = true
-                            for volumeView in self.networkVolumes {
-                                if volumeView.volume == newVolume {
-
-                                    // set sizes here
-                                    if let sizes = sizeRecords[volumeView.volume.name] {
-                                        volumeView.sizes = sizes
-                                    }
-                                    isNew = false
-                                    break
-                                }
-                            }
-
-                            if isNew {
-                                let viewModel = VolumeViewModel(volume: newVolume,
-                                                                color: .purple,
-                                                                preferences: self.preferences)
-                                if let sizes = sizeRecords[newVolume.name] {
-                                    viewModel.sizes = sizes
-                                }
-                                self.networkVolumes.append(viewModel)
-                            }
-                        }
-                    }
-                  
-                } catch is CancellationError {
-                    return
-                } catch {
-                    print("ERROR: \(error)")
-                }
-
+            // iterate until we are cancelled or the model goes away
+            while !Task.isCancelled {
+                guard let seconds = await self?.networkPollOnce() else { return }
                 if Task.isCancelled { return }
                 // don't sleep the first time so the graph updates quicker
                 if !isFirst {
-                    let seconds = await MainActor.run { self.preferences.networkPollIntervalSeconds }
                     do {
                         try await Task.sleep(nanoseconds: UInt64(max(seconds, 0)*1_000_000_000))
                     } catch { return }
@@ -179,41 +140,98 @@ public final class ViewModel {
             }
         }
     }
-    
-    func listLocalVolumes() {
-        Task.detached {
-            do {
-                await self.manager.loadStoredLocalVolumeRecords()
-                let volumes = try await self.manager.listLocalVolumes()
-                await MainActor.run {
-                    if self.preferences.localVolumesToShow.count == 0 {
-                        self.preferences.localVolumesToShow = Set(volumes.map { $0.name })
-                    }
-                    var colorIndex = 0
-                    self.localVolumes = volumes.map {
-                        let ret = VolumeViewModel(volume: $0,
-                                                  color: self.lineColors[colorIndex],
-                                                  preferences: self.preferences)
-                        colorIndex += 1
-                        if colorIndex >= self.lineColors.count { colorIndex = 0 }
 
-                        if self.preferences.localVolumesToShow.contains($0.name) {
-                            ret.isSelected = true
-                        } else {
-                            ret.isSelected = false
+    /// One network poll.  Returns the poll interval, or nil if cancelled.
+    private func networkPollOnce() async -> Int? {
+        do {
+            let (newNetworkVolumes, sizeRecords) =
+              try await manager.recordNetworkVolumeSizes()
+
+            await networkRecordViewUpdate(volumes: newNetworkVolumes,
+                                          records: sizeRecords)
+
+            /*
+             reconcile the existing network volumes with new ones
+             create view models for new network volumes
+             */
+            for newVolume in newNetworkVolumes {
+                var isNew = true
+                for volumeView in networkVolumes {
+                    if volumeView.volume == newVolume {
+                        // set sizes here
+                        if let sizes = sizeRecords[volumeView.volume.name] {
+                            volumeView.sizes = sizes
                         }
-                        return ret
+                        isNew = false
+                        break
                     }
                 }
-                await self.startLocalVolumeTask()
+
+                if isNew {
+                    let viewModel = VolumeViewModel(volume: newVolume,
+                                                    color: .purple,
+                                                    preferences: preferences)
+                    if let sizes = sizeRecords[newVolume.name] {
+                        viewModel.sizes = sizes
+                    }
+                    networkVolumes.append(viewModel)
+                }
+            }
+        } catch is CancellationError {
+            return nil
+        } catch {
+            print("ERROR: \(error)")
+        }
+        return networkPollIntervalOverride ?? preferences.networkPollIntervalSeconds
+    }
+
+    func listLocalVolumes() {
+        if listingTask != nil { return }
+        self.listingTask = Task.detached { [weak self] in
+            do {
+                guard let found = try await self?.discoverLocalVolumes() else { return }
+                _ = found
+                if Task.isCancelled { return }
+                await self?.startLocalVolumeTask()
             } catch {
                 print("ERROR: \(error)")
             }
         }
     }
 
+    private func discoverLocalVolumes() async throws -> [LocalVolume] {
+        await manager.loadStoredLocalVolumeRecords()
+        let volumes = try await manager.listLocalVolumes()
+        if preferences.localVolumesToShow.count == 0 {
+            preferences.localVolumesToShow = Set(volumes.map { $0.name })
+        }
+        var colorIndex = 0
+        localVolumes = volumes.map {
+            let ret = VolumeViewModel(volume: $0,
+                                      color: lineColors[colorIndex],
+                                      preferences: preferences)
+            colorIndex += 1
+            if colorIndex >= lineColors.count { colorIndex = 0 }
+            ret.isSelected = preferences.localVolumesToShow.contains($0.name)
+            return ret
+        }
+        return volumes
+    }
+
+    private var listingTask: Task<Void,Never>?
     private var localVolumeTask: Task<Void,Never>?
     private var networkVolumeTask: Task<Void,Never>?
+
+    /// Cancel all polling loops (window closed).  A later listLocalVolumes() /
+    /// listNetworkVolumes() starts them again.
+    func stopPolling() {
+        listingTask?.cancel()
+        localVolumeTask?.cancel()
+        networkVolumeTask?.cancel()
+        listingTask = nil
+        localVolumeTask = nil
+        networkVolumeTask = nil
+    }
 
     public func chartRange(showFree: Bool, showUsed: Bool) -> ClosedRange<UInt> {
 
@@ -370,7 +388,7 @@ public final class ViewModel {
                                          records: NetworkVolumeRecords,
                                          shouldSave: Bool = true) async
     {
-        if shouldSave {
+        if shouldSave && persistsToDisk {
             // save them for later
             Task.detached {
                 do {
@@ -404,7 +422,7 @@ public final class ViewModel {
                                        shouldSave: Bool = true) async
     {
 
-        if shouldSave {
+        if shouldSave && persistsToDisk {
             // save them for later
             Task.detached {
                 do {
@@ -534,24 +552,15 @@ public final class ViewModel {
     }
     
     private func startLocalVolumeTask() {
-        self.localVolumeTask = Task.detached {
+        if localVolumeTask != nil { return }
+        self.localVolumeTask = Task.detached { [weak self] in
             var isFirst = true
             var pollCount = 0
-            // then iterate until we are cancelled
-            while(true) {
-                do {
-                    let records = try await self.manager.recordLocalVolumeSizes()
-                    // time span of the records, computed off the main actor
-                    let duration = Date().timeIntervalSince1970 - oldestTime(from: records)
-                    await self.localRecordViewUpdate(records: records, duration: duration)
-                } catch is CancellationError {
-                    return
-                } catch {
-                    print("ERROR: \(error)")
-                }
+            // iterate until we are cancelled or the model goes away
+            while !Task.isCancelled {
+                guard let seconds = await self?.localPollOnce() else { return }
 
                 if Task.isCancelled { return }
-                let seconds = await MainActor.run { self.preferences.localPollIntervalSeconds }
 
                 // don't sleep the first time so the graph updates quicker
                 if !isFirst {
@@ -566,14 +575,33 @@ public final class ViewModel {
                 let every = Self.rediscoveryPollCount(pollIntervalSeconds: seconds)
                 if pollCount >= every {
                     pollCount = 0
-                    do {
-                        let volumes = try await self.manager.listLocalVolumes()
-                        await MainActor.run { self.reconcileLocalVolumes(with: volumes) }
-                    } catch {
-                        print("ERROR re-listing local volumes: \(error)")
-                    }
+                    await self?.rediscoverLocalVolumes()
                 }
             }
+        }
+    }
+
+    /// One local poll.  Returns the poll interval, or nil if cancelled.
+    private func localPollOnce() async -> Int? {
+        do {
+                    let records = try await self.manager.recordLocalVolumeSizes()
+            // time span of the records, computed off the main actor
+            let duration = Date().timeIntervalSince1970 - oldestTime(from: records)
+                    await self.localRecordViewUpdate(records: records, duration: duration)
+        } catch is CancellationError {
+            return nil
+        } catch {
+            print("ERROR: \(error)")
+        }
+        return preferences.localPollIntervalSeconds
+    }
+
+    private func rediscoverLocalVolumes() async {
+        do {
+            let volumes = try await manager.listLocalVolumes()
+            reconcileLocalVolumes(with: volumes)
+        } catch {
+            print("ERROR re-listing local volumes: \(error)")
         }
     }
 
@@ -623,7 +651,7 @@ public final class ViewModel {
     }
 
     func savePreferences() {
-        if isDemo { return }
+        if isDemo || !persistsToDisk { return }
         let prefsToSave = self.preferences
         Task.detached {
             do {
