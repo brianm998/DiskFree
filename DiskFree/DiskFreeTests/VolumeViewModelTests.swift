@@ -24,6 +24,38 @@ struct VolumeViewModelTests {
         return m
     }
 
+    @Test @MainActor func thresholdChangesReachExistingVolumes() {
+        let vm = ViewModel(demo: true)
+        let m = model([sample(free: 50, used: 50)])
+        vm.localVolumes = [m]
+        vm.preferences.lowSpaceWarningThresholdGigs = 100
+        vm.preferences.lowSpaceErrorThresholdGigs = 60
+        #expect(m.showLowSpaceWarning)
+        #expect(m.showLowSpaceError)
+        vm.preferences.lowSpaceWarningThresholdGigs = 40
+        #expect(!m.showLowSpaceWarning)
+        vm.preferences.lowSpaceErrorThresholdGigs = 10
+        #expect(!m.showLowSpaceError)
+    }
+
+    @Test @MainActor func wholePreferencesAssignmentUpdatesVolumes() {
+        let vm = ViewModel(demo: true)
+        let m = model([sample(free: 50, used: 50)])
+        vm.localVolumes = [m]
+        var p = Preferences()
+        p.lowSpaceWarningThresholdGigs = 40
+        p.lowSpaceErrorThresholdGigs = 10
+        vm.preferences = p
+        #expect(m.lowSpaceWarningThresholdGigs == 40)
+        #expect(m.lowSpaceErrorThresholdGigs == 10)
+        #expect(!m.showLowSpaceWarning)
+        p.lowSpaceWarningThresholdGigs = 60
+        p.lowSpaceErrorThresholdGigs = 55
+        vm.preferences = p
+        #expect(m.showLowSpaceWarning)
+        #expect(m.showLowSpaceError)
+    }
+
     @Test @MainActor func sortedIfChangedNilWhenAlreadySorted() {
         let big = model([sample(free: 1, used: 1)])
         let small = model([sample(free: 1, used: 1)])

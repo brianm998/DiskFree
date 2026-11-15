@@ -34,7 +34,20 @@ public final class ViewModel {
         }
     }
     
-    var preferences = Preferences()
+    var preferences = Preferences() {
+        didSet { pushThresholdsToVolumes() }
+    }
+
+    /// keep every volume's low-space thresholds in step with preferences;
+    /// only assigns on change so unrelated edits don't invalidate volume views
+    private func pushThresholdsToVolumes() {
+        let warning = preferences.lowSpaceWarningThresholdGigs
+        let error = preferences.lowSpaceErrorThresholdGigs
+        for v in localVolumes + networkVolumes {
+            if v.lowSpaceWarningThresholdGigs != warning { v.lowSpaceWarningThresholdGigs = warning }
+            if v.lowSpaceErrorThresholdGigs != error { v.lowSpaceErrorThresholdGigs = error }
+        }
+    }
     
     var warningLocalVolumes: Set<String> = []
     var errorLocalVolumes: Set<String> = []
