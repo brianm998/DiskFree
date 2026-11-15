@@ -6,9 +6,22 @@ struct CombinedChartView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 4) {
-            combinedChart
+            CombinedChartPlot(showFree: viewModel.preferences.showFreeSpace,
+                              showUsed: viewModel.preferences.showUsedSpace)
             CombinedChartLegendView()
         }
+    }
+}
+
+// The chart itself.  Takes the two flags as plain inputs and never reads
+// viewModel.preferences, so unrelated preference changes don't rebuild it.
+struct CombinedChartPlot: View {
+    @Environment(ViewModel.self) var viewModel: ViewModel
+    let showFree: Bool
+    let showUsed: Bool
+
+    var body: some View {
+        combinedChart
     }
 
     func gradient(with color: Color) -> LinearGradient {
@@ -25,7 +38,7 @@ struct CombinedChartView: View {
 //            let dotSize = 24//lineWidth*4
             ForEach(self.viewModel.allVolumes) { volumeView in
                 if volumeView.isSelected {
-                    if viewModel.preferences.showFreeSpace {
+                    if showFree {
                         ForEach(volumeView.sizes) { sizeData in
                             LineMark(
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
@@ -85,7 +98,7 @@ struct CombinedChartView: View {
                             }
                         }
                     }
-                    if viewModel.preferences.showUsedSpace {
+                    if showUsed {
                         ForEach(volumeView.sizes) { sizeData in
                             LineMark(
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
@@ -103,8 +116,8 @@ struct CombinedChartView: View {
           .chartXAxis {
               AxisMarks(preset: .aligned) // XXX doesn't help :(
           }
-          .chartYScale(domain: viewModel.chartRange(showFree: viewModel.preferences.showFreeSpace,
-                                                    showUsed: viewModel.preferences.showUsedSpace))
+          .chartYScale(domain: viewModel.chartRange(showFree: showFree,
+                                                    showUsed: showUsed))
           .chartYAxisLabel("Gigabytes")
     }
 }
