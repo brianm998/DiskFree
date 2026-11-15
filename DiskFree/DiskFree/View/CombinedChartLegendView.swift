@@ -16,7 +16,8 @@ struct CombinedChartLegendView: View {
                         Grid(alignment: .leading, horizontalSpacing: 4, verticalSpacing: 0) {
                             ForEach(self.viewModel.allVolumes) { volumeView in
                                 if volumeView.isSelected {
-                                    CombinedChartLegendItemView(volumeView: volumeView)
+                                    CombinedChartLegendItemView(volumeView: volumeView,
+                                                                legendFontSize: viewModel.preferences.legendFontSize)
                                 }
 
                             }
