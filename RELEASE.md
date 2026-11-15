@@ -44,7 +44,23 @@ package (`disk_free_<version>_mas.pkg`, artifact `disk-free-mas`) with
 the job logs a notice and exits 0, so tag pushes keep working.
 
 On a manual run, the `upload_to_app_store` input (default off) controls whether
-the build is uploaded; when off, it is built and validated only.
+the build is uploaded; when off, it is built and validated only. A manual run
+with the box ticked fails with an error naming the missing secrets if
+`MAS_CERTIFICATE_P12_BASE64` is not set; without the box, or on a tag push, the
+missing secret is only a notice.
+
+### Toolchain, build number and tests
+
+- `test`, `build` and `app-store` run on `macos-26` and select Xcode with the
+  workflow-level `XCODE_VERSION` (currently `26.6`); `xcodebuild -version` is
+  logged. To bump it, check the macos-26 image list in actions/runner-images and
+  edit `XCODE_VERSION` in `release.yml`.
+- The build number (`CFBundleVersion`) is `<run_number>.<run_attempt>`, so a
+  re-run of a failed job gets a new, unique number.
+- The `test` job runs the unit tests (never `DiskFreeUITests`); `build` and
+  `app-store` need it.
+- A manual run without a `version` input uses the newest `release/*` tag's
+  version, falling back to `release.sh` only when there is no tag.
 
 ### GitHub secrets (added by hand)
 

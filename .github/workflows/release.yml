@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number (e.g. 0.8.1). Defaults to value in release.sh.'
+        description: 'Version number (e.g. 0.8.1). Defaults to the newest release/* tag (release.sh if none).'
         required: false
       upload_to_app_store:
         description: 'Upload the Mac App Store build to App Store Connect (otherwise build + validate only).'
@@ -20,6 +20,11 @@ on:
 permissions:
   contents: write
 
+# Xcode 26.x installed on the macos-26 runner image; bump when the image's
+# list (actions/runner-images, macos-26 README) drops it.
+env:
+  XCODE_VERSION: "26.6"
+
 jobs:
   # ── Resolve the release version once ─────────────────────────────────────────
   version:
@@ -28,8 +33,11 @@ jobs:
     outputs:
       version: ${{ steps.ver.outputs.version }}
       tag: ${{ steps.ver.outputs.tag }}
+      build_number: ${{ steps.ver.outputs.build_number }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - id: ver
         shell: bash
         run: |
@@ -38,19 +46,51 @@ jobs:
           elif [[ -n "${{ inputs.version }}" ]]; then
             V="${{ inputs.version }}"
           else
-            V="$(grep '^VERSION=' DiskFree/release.sh | head -1 | sed 's/VERSION="\(.*\)"/\1/')"
+            LATEST="$(git tag -l 'release/*' --sort=-v:refname | head -1)"
+            if [[ -n "$LATEST" ]]; then
+              V="${LATEST#release/}"
+            else
+              V="$(grep '^VERSION=' DiskFree/release.sh | head -1 | sed 's/VERSION="\(.*\)"/\1/')"
+            fi
           fi
           echo "version=$V"          >> "$GITHUB_OUTPUT"
           echo "tag=release/$V"    >> "$GITHUB_OUTPUT"
+          # Unique per re-run: CFBundleVersion must not repeat in App Store Connect.
+          echo "build_number=${{ github.run_number }}.${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+
+  # ── Unit tests (never the UI tests) ──────────────────────────────────────────
+  test:
+    name: Unit tests
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
+          xcodebuild -version
+
+      - name: Run unit tests
+        run: |
+          cd DiskFree && xcodebuild test \
+            -project DiskFree.xcodeproj -scheme DiskFree \
+            -destination 'platform=macOS' \
+            -skip-testing:DiskFreeUITests \
+            CODE_SIGNING_ALLOWED=NO
 
   # ── Build, sign, notarize, and package DiskFree ───────────────────────────────
   build:
     name: Build macOS App
-    runs-on: macos-latest
-    needs: version
+    runs-on: macos-26
+    needs: [version, test]
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
+          xcodebuild -version
 
       - uses: actions/cache@v4
         with:
@@ -119,6 +159,7 @@ jobs:
       - name: Build, sign, notarize, and package
         env:
           VERSION:             ${{ needs.version.outputs.version }}
+          BUILD_NUMBER:        ${{ needs.version.outputs.build_number }}
           SIGN_IDENTITY:       ${{ steps.cert.outputs.sign_identity }}
           APPLE_TEAM_ID:       ${{ secrets.APPLE_TEAM_ID }}
           APPLE_API_KEY_PATH:  ${{ runner.temp }}/private_keys/AuthKey_${{ secrets.APPLE_API_KEY_ID }}.p8
@@ -132,7 +173,7 @@ jobs:
           fi
           cd DiskFree && ./release.sh \
             --version "$VERSION" \
-            --build-number "${{ github.run_number }}" \
+            --build-number "$BUILD_NUMBER" \
             --out "../dist" \
             "${SIGN_ARGS[@]}"
 
@@ -149,14 +190,20 @@ jobs:
           if-no-files-found: error
 
   # ── Build, sign and upload the Mac App Store package ─────────────────────────
-  # No-op (exit 0) until the MAS_* secrets exist.
+  # No-op (exit 0) until the MAS_* secrets exist, except a manual run that asked
+# for an upload, which fails.
   app-store:
     name: Mac App Store
-    runs-on: macos-latest
-    needs: version
+    runs-on: macos-26
+    needs: [version, test]
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
+          xcodebuild -version
 
       - name: Import Mac App Store certificates and profile
         id: mas
@@ -166,8 +213,13 @@ jobs:
           PROFILE_B64: ${{ secrets.MAS_PROVISIONING_PROFILE_BASE64 }}
           KC_PASS: ${{ secrets.KEYCHAIN_PASSWORD }}
           TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          UPLOAD_REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_to_app_store }}
         run: |
           if [[ -z "$P12_B64" ]]; then
+            if [[ "$UPLOAD_REQUESTED" == "true" ]]; then
+              echo "::error::upload_to_app_store was ticked but MAS_CERTIFICATE_P12_BASE64 is not set. Add the MAS_* secrets (MAS_CERTIFICATE_P12_BASE64, MAS_CERTIFICATE_PASSWORD, MAS_PROVISIONING_PROFILE_BASE64)."
+              exit 1
+            fi
             echo "::notice::MAS_CERTIFICATE_P12_BASE64 not set — skipping Mac App Store build"
             echo "has_cert=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -231,6 +283,7 @@ jobs:
         if: steps.mas.outputs.has_cert == 'true'
         env:
           VERSION:             ${{ needs.version.outputs.version }}
+          BUILD_NUMBER:        ${{ needs.version.outputs.build_number }}
           APPLE_TEAM_ID:       ${{ secrets.APPLE_TEAM_ID }}
           MAS_PROFILE_UUID:    ${{ steps.mas.outputs.profile_uuid }}
           MAS_INSTALLER_CERT:  ${{ steps.mas.outputs.installer }}
@@ -246,7 +299,7 @@ jobs:
           fi
           cd DiskFree && ./release.sh \
             --version "$VERSION" \
-            --build-number "${{ github.run_number }}" \
+            --build-number "$BUILD_NUMBER" \
             --out "../dist-mas" \
             --app-store "${MODE[@]}"
 
