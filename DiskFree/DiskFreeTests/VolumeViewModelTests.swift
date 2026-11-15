@@ -24,7 +24,7 @@ struct VolumeViewModelTests {
         return m
     }
 
-    @Test func sortedIfChangedNilWhenAlreadySorted() {
+    @Test @MainActor func sortedIfChangedNilWhenAlreadySorted() {
         let big = model([sample(free: 1, used: 1)])
         let small = model([sample(free: 1, used: 1)])
         big.lastSize = SizeInfo(importantCapacity: 0, opportunisticCapacity: 0, totalCapacity: 2000 * Self.g, timestamp: 0)
