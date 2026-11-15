@@ -167,7 +167,9 @@ class VolumeViewModel: Identifiable,
     var isMostEmpty = false
     var isMostFull = false
 
-    var preferences: Preferences
+    /// low-space thresholds, pushed from ViewModel.preferences whenever they change
+    var lowSpaceWarningThresholdGigs: UInt
+    var lowSpaceErrorThresholdGigs: UInt
     
     enum Direction {
         case up
@@ -175,7 +177,49 @@ class VolumeViewModel: Identifiable,
         case equal
     }
     
-    public var sizes: [SizeInfo] = []
+    public var sizes: [SizeInfo] = [] {
+        didSet { recomputeCaches() }
+    }
+
+    /// maximum number of points plotted per line
+    static let chartPointCap = 300
+
+    /// display-downsampled copy of sizes (first and last always kept)
+    private(set) var chartSizes: [SizeInfo] = []
+
+    private var cachedMaxUsed: UInt = 0
+    private var cachedMaxFree: UInt = 0
+    private var cachedMinUsed: UInt = 0
+    private var cachedMinFree: UInt = 0
+
+    static func downsample(_ sizes: [SizeInfo], cap: Int) -> [SizeInfo] {
+        let n = sizes.count
+        guard cap >= 2, n > cap else { return sizes }
+        var out: [SizeInfo] = []
+        out.reserveCapacity(cap)
+        for i in 0..<cap {
+            // evenly spaced indices; i=0 -> 0, i=cap-1 -> n-1
+            out.append(sizes[i * (n - 1) / (cap - 1)])
+        }
+        return out
+    }
+
+    private func recomputeCaches() {
+        chartSizes = Self.downsample(sizes, cap: Self.chartPointCap)
+        var maxUsed: UInt = 0, maxFree: UInt = 0
+        var minUsed = UInt.max, minFree: UInt = 8000000
+        for size in sizes {
+            let used = size.gigsUsed, free = size.gigsFree
+            if used > maxUsed { maxUsed = used }
+            if free > maxFree { maxFree = free }
+            if used < minUsed { minUsed = used }
+            if free < minFree { minFree = free }
+        }
+        cachedMaxUsed = maxUsed
+        cachedMaxFree = maxFree
+        cachedMinUsed = sizes.isEmpty ? 0 : minUsed
+        cachedMinFree = sizes.isEmpty ? 0 : minFree
+    }
     
     var id = UUID()
 
@@ -237,18 +281,26 @@ class VolumeViewModel: Identifiable,
         self.init(volume: .local(volume), color: color, preferences: preferences)
     }
     
-    public init(volume: VolumeType, color: Color, preferences: Preferences) {
+    public convenience init(volume: VolumeType, color: Color, preferences: Preferences) {
+        self.init(volume: volume, color: color,
+                  lowSpaceWarningThresholdGigs: preferences.lowSpaceWarningThresholdGigs,
+                  lowSpaceErrorThresholdGigs: preferences.lowSpaceErrorThresholdGigs)
+    }
+
+    public init(volume: VolumeType, color: Color,
+                lowSpaceWarningThresholdGigs: UInt, lowSpaceErrorThresholdGigs: UInt) {
         self.volume = volume
         self.lineColor = color
-        self.preferences = preferences
+        self.lowSpaceWarningThresholdGigs = lowSpaceWarningThresholdGigs
+        self.lowSpaceErrorThresholdGigs = lowSpaceErrorThresholdGigs
     }
 
     public var showLowSpaceWarning: Bool {
-        isBelow(gigs: self.preferences.lowSpaceWarningThresholdGigs)
+        isBelow(gigs: self.lowSpaceWarningThresholdGigs)
     }
     
     public var showLowSpaceError: Bool {
-        isBelow(gigs: self.preferences.lowSpaceErrorThresholdGigs)
+        isBelow(gigs: self.lowSpaceErrorThresholdGigs)
     }
     
     public func isBelow(gigs: UInt) -> Bool {
@@ -259,31 +311,10 @@ class VolumeViewModel: Identifiable,
     }
 
     // make these published values that change when sizes do
-    public var maxUsedGigs: UInt {
-        var ret: UInt = 0
-        for size in sizes { if size.gigsUsed > ret { ret = size.gigsUsed } }
-        return ret
-    }
-
-    public var maxFreeGigs: UInt {
-        var ret: UInt = 0
-        for size in sizes { if size.gigsFree > ret { ret = size.gigsFree } }
-        return ret
-    }
-
-    public var minUsedGigs: UInt {
-        var ret: UInt = UInt.max
-        if sizes.count == 0 { return 0 }
-        for size in sizes { if size.gigsUsed < ret { ret = size.gigsUsed } }
-        return ret
-    }
-
-    public var minFreeGigs: UInt {
-        var ret: UInt = 8000000
-        if sizes.count == 0 { return 0 }
-        for size in sizes { if size.gigsFree < ret { ret = size.gigsFree } }
-        return ret
-    }
+    public var maxUsedGigs: UInt { cachedMaxUsed }
+    public var maxFreeGigs: UInt { cachedMaxFree }
+    public var minUsedGigs: UInt { cachedMinUsed }
+    public var minFreeGigs: UInt { cachedMinFree }
 
     var chartUsedLineText: String {
         if let lastSize = self.lastSize {
