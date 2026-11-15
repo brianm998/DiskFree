@@ -167,7 +167,9 @@ class VolumeViewModel: Identifiable,
     var isMostEmpty = false
     var isMostFull = false
 
-    var preferences: Preferences
+    /// low-space thresholds, pushed from ViewModel.preferences whenever they change
+    var lowSpaceWarningThresholdGigs: UInt
+    var lowSpaceErrorThresholdGigs: UInt
     
     enum Direction {
         case up
@@ -279,18 +281,26 @@ class VolumeViewModel: Identifiable,
         self.init(volume: .local(volume), color: color, preferences: preferences)
     }
     
-    public init(volume: VolumeType, color: Color, preferences: Preferences) {
+    public convenience init(volume: VolumeType, color: Color, preferences: Preferences) {
+        self.init(volume: volume, color: color,
+                  lowSpaceWarningThresholdGigs: preferences.lowSpaceWarningThresholdGigs,
+                  lowSpaceErrorThresholdGigs: preferences.lowSpaceErrorThresholdGigs)
+    }
+
+    public init(volume: VolumeType, color: Color,
+                lowSpaceWarningThresholdGigs: UInt, lowSpaceErrorThresholdGigs: UInt) {
         self.volume = volume
         self.lineColor = color
-        self.preferences = preferences
+        self.lowSpaceWarningThresholdGigs = lowSpaceWarningThresholdGigs
+        self.lowSpaceErrorThresholdGigs = lowSpaceErrorThresholdGigs
     }
 
     public var showLowSpaceWarning: Bool {
-        isBelow(gigs: self.preferences.lowSpaceWarningThresholdGigs)
+        isBelow(gigs: self.lowSpaceWarningThresholdGigs)
     }
     
     public var showLowSpaceError: Bool {
-        isBelow(gigs: self.preferences.lowSpaceErrorThresholdGigs)
+        isBelow(gigs: self.lowSpaceErrorThresholdGigs)
     }
     
     public func isBelow(gigs: UInt) -> Bool {
