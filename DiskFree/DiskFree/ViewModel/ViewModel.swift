@@ -14,12 +14,24 @@ public final class ViewModel {
      https://forums.developer.apple.com/forums/thread/735416
      
      */
-    var localVolumes: [VolumeViewModel] = []
-    var networkVolumes: [VolumeViewModel] = []
+    var localVolumes: [VolumeViewModel] = [] {
+        didSet { refreshAllVolumes() }
+    }
+    var networkVolumes: [VolumeViewModel] = [] {
+        didSet { refreshAllVolumes() }
+    }
 
-    var allVolumes: [VolumeViewModel] {
-        (localVolumes + networkVolumes)
+    /// local + network volumes, most free space first.  Stored so views don't
+    /// re-sort on every access; refreshed when either list changes and in applyColors.
+    private(set) var allVolumes: [VolumeViewModel] = []
+
+    private func refreshAllVolumes() {
+        let sorted = (localVolumes + networkVolumes)
           .sorted { $0.lastFreeSize() > $1.lastFreeSize() }
+        // avoid invalidating observers when nothing changed
+        if sorted.map(\.id) != allVolumes.map(\.id) {
+            allVolumes = sorted
+        }
     }
     
     var preferences = Preferences()
@@ -199,8 +211,6 @@ public final class ViewModel {
 
             let bufferGigs = (max-min)/8
 
-            print("Fing bufferGigs \(bufferGigs)")
-            
             if min > bufferGigs {
                 min -= bufferGigs
             } else {
@@ -377,6 +387,7 @@ public final class ViewModel {
     }
 
     private func localRecordViewUpdate(records: LocalVolumeRecords,
+                                       duration: TimeInterval,
                                        shouldSave: Bool = true) async
     {
 
@@ -391,12 +402,7 @@ public final class ViewModel {
             }
         }
 
-        // compute the time duration of records we have 
-        let duration = Date().timeIntervalSince1970 - oldestTime(from: records)
-
         await MainActor.run {
-            let startTime = Date().timeIntervalSince1970
-
             self.newLocalVolumeSizes = records
 
             self.volumeRecordsTimeDurationSeconds = duration
@@ -452,9 +458,6 @@ public final class ViewModel {
 
             // apply colors here
             applyColors()
-
-            let endTime = Date().timeIntervalSince1970
-            print("view update took \(endTime-startTime) seconds")
         }
     }
 
@@ -467,9 +470,8 @@ public final class ViewModel {
     }
 
     private func applyColors() {
-        let volumesEmptyFirst = self.allVolumes.filter { $0.isSelected }.sorted {
-            $0.lastFreeSize() > $1.lastFreeSize()
-        }
+        refreshAllVolumes()   // lastSize values may have changed
+        let volumesEmptyFirst = self.allVolumes.filter { $0.isSelected }
         
         var colorIndex = 0
         var lastSelectedViewModel: VolumeViewModel? = nil
@@ -505,7 +507,6 @@ public final class ViewModel {
             // 1.00 - red again
             
             volumeViewModel.lineColor = Color(hue: currentHue, saturation: 1, brightness: 1)
-            print("using currentHue \(currentHue)")
             currentHue += hueStep
             lastSelectedViewModel = volumeViewModel
         }
@@ -526,7 +527,10 @@ public final class ViewModel {
             // then iterate until we are cancelled
             while(true) {
                 do {
-                    await self.localRecordViewUpdate(records: try await self.manager.recordLocalVolumeSizes())
+                    let records = try await self.manager.recordLocalVolumeSizes()
+                    // time span of the records, computed off the main actor
+                    let duration = Date().timeIntervalSince1970 - oldestTime(from: records)
+                    await self.localRecordViewUpdate(records: records, duration: duration)
                 } catch is CancellationError {
                     return
                 } catch {

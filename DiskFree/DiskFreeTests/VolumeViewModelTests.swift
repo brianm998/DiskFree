@@ -118,4 +118,50 @@ struct VolumeViewModelTests {
         #expect(try #require(m.amountFull) == 0.75)
         #expect(try #require(m.amountEmpty) == 0.25)
     }
+
+    // MARK: chart caches
+
+    @Test func chartSizesCapsAndKeepsEnds() {
+        let samples = (0..<900).map { sample(free: 100 + $0 % 50, used: 500, t: TimeInterval($0)) }
+        let m = model(samples)
+        #expect(m.chartSizes.count <= 300)
+        #expect(m.chartSizes.first == samples.first)
+        #expect(m.chartSizes.last == samples.last)
+        #expect(m.sizes.count == 900)
+    }
+
+    @Test func chartSizesEqualsSizesWhenSmall() {
+        let samples = (0..<100).map { sample(free: 100, used: 500, t: TimeInterval($0)) }
+        #expect(model(samples).chartSizes == samples)
+    }
+
+    @Test func cachedMinMaxMatchFullScan() {
+        let samples = [sample(free: 300, used: 700, t: 1),
+                       sample(free: 100, used: 900, t: 2),
+                       sample(free: 500, used: 500, t: 3)]
+        let m = model(samples)
+        #expect(m.minFreeGigs == 100)
+        #expect(m.maxFreeGigs == 500)
+        #expect(m.minUsedGigs == 500)
+        #expect(m.maxUsedGigs == 900)
+    }
+
+    @Test func cachedMinMaxForEmptySizes() {
+        let m = model([])
+        #expect(m.minFreeGigs == 0)
+        #expect(m.minUsedGigs == 0)
+        #expect(m.maxFreeGigs == 0)
+        #expect(m.maxUsedGigs == 0)
+    }
+
+    @Test func sizeInfoIdIsTimestamp() throws {
+        let a = sample(free: 1, used: 1, t: 5)
+        let b = sample(free: 1, used: 1, t: 6)
+        #expect(a.id == 5)
+        #expect(a.id != b.id)
+        let data = try JSONEncoder().encode(a)
+        let json = try #require(String(data: data, encoding: .utf8))
+        #expect(!json.contains("\"id\""))
+        #expect(try JSONDecoder().decode(SizeInfo.self, from: data) == a)
+    }
 }

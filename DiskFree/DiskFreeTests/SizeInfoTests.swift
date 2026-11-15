@@ -58,6 +58,6 @@ struct SizeInfoTests {
         #expect(a == b)
         #expect(a != c)
         #expect(a != d)
-        #expect(a.id == "5.0")
+        #expect(a.id == 5.0)
     }
 }

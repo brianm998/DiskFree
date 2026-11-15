@@ -10,7 +10,7 @@ struct MultiChartView: View {
                 ForEach(viewModel.localVolumesSortedByEmptyFirst) { volumeView in
                     if volumeView.isSelected {
                         HStack {
-                            MultiChartPlot(sizes: volumeView.sizes,
+                            MultiChartPlot(sizes: volumeView.chartSizes,
                                            showFree: viewModel.preferences.showFreeSpace,
                                            showUsed: viewModel.preferences.showUsedSpace)
                             VStack(alignment: .leading) {
