@@ -20,7 +20,7 @@ public struct SizeInfo: Sendable,
     
     let timestamp: TimeInterval
 
-    public var id: String { "\(timestamp)" }
+    public var id: TimeInterval { timestamp }
 
     public var freeSize_k: UInt { UInt(importantCapacity/1024) }
     public var totalSize_k: UInt { UInt(totalCapacity/1024) }
@@ -73,7 +73,6 @@ public struct SizeInfo: Sendable,
             //self.availableCapacity = availableCapacity
             self.totalCapacity = totalCapacity
             self.timestamp = timestamp
-            print("self \(self)")
         } else {
             throw "couldn't read size data for volume \(path)" 
         }

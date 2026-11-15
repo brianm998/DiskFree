@@ -39,7 +39,7 @@ struct CombinedChartPlot: View {
             ForEach(self.viewModel.allVolumes) { volumeView in
                 if volumeView.isSelected {
                     if showFree {
-                        ForEach(volumeView.sizes) { sizeData in
+                        ForEach(volumeView.chartSizes) { sizeData in
                             LineMark(
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
 		              y: .value("Gigabytes Free", sizeData.gigsFree),
@@ -55,8 +55,8 @@ struct CombinedChartPlot: View {
                                                      dash: [12],
                                                      dashPhase: 0))
                         }
-                        if volumeView.sizes.count > 0 {
-                            let sizeData = volumeView.sizes[0]
+                        if volumeView.chartSizes.count > 0 {
+                            let sizeData = volumeView.chartSizes[0]
                             PointMark(
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
 		              y: .value("Gigabytes Free", sizeData.gigsFree)
@@ -99,7 +99,7 @@ struct CombinedChartPlot: View {
                         }
                     }
                     if showUsed {
-                        ForEach(volumeView.sizes) { sizeData in
+                        ForEach(volumeView.chartSizes) { sizeData in
                             LineMark(
                               x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
 		              y: .value("Gigabytes Used", sizeData.gigsUsed),
