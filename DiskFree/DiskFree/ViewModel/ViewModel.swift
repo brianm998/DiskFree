@@ -45,6 +45,7 @@ public final class ViewModel {
 
     init() {
         self.isDemo = false
+        Speaker.warmVoiceCache()
         Task.detached {
             // try to load load preferences from file
             try? await self.preferenceManager?.loadPreferences()
