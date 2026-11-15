@@ -584,10 +584,10 @@ public final class ViewModel {
     /// One local poll.  Returns the poll interval, or nil if cancelled.
     private func localPollOnce() async -> Int? {
         do {
-            let records = try await manager.recordLocalVolumeSizes()
+                    let records = try await self.manager.recordLocalVolumeSizes()
             // time span of the records, computed off the main actor
             let duration = Date().timeIntervalSince1970 - oldestTime(from: records)
-            await localRecordViewUpdate(records: records, duration: duration)
+                    await self.localRecordViewUpdate(records: records, duration: duration)
         } catch is CancellationError {
             return nil
         } catch {
