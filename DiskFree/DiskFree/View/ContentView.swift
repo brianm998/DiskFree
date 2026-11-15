@@ -5,9 +5,19 @@ struct ContentView: View {
         if ScreenshotMode.isEnabled() {
             DemoContentView()
         } else {
-            MainView()
-              .environment(ViewModel())
+            LiveContentView()
         }
+    }
+}
+
+/// Holds the live model in @State so it is created once per window,
+/// not on every evaluation of ContentView.body
+private struct LiveContentView: View {
+    @State private var viewModel = ViewModel()
+
+    var body: some View {
+        MainView()
+          .environment(viewModel)
     }
 }
 
