@@ -233,6 +233,13 @@ public final class ViewModel {
         networkVolumeTask = nil
     }
 
+    /// Like stopPolling(), but returns only after the cancelled loops have finished.
+    func stopPollingAndWait() async {
+        let tasks = [listingTask, localVolumeTask, networkVolumeTask]
+        stopPolling()
+        for t in tasks { t?.cancel(); await t?.value }
+    }
+
     public func chartRange(showFree: Bool, showUsed: Bool) -> ClosedRange<UInt> {
 
         var min = minGigs(showFree: showFree, showUsed: showUsed)

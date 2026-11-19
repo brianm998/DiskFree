@@ -31,8 +31,15 @@ struct ViewModelPollingTests {
         return vm
     }
 
-    func waitUntil(_ cond: () -> Bool) async {
-        for _ in 0..<300 where !cond() { try? await Task.sleep(nanoseconds: 10_000_000) }
+    func waitUntil(timeout: TimeInterval = 10, _ cond: () -> Bool) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !cond() {
+            if Date() >= deadline {
+                Issue.record("waitUntil timed out after \(timeout) s")
+                return
+            }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
     }
 
     @Test func stopPollingStopsNetworkLoop() async throws {
@@ -41,10 +48,9 @@ struct ViewModelPollingTests {
         vm.listNetworkVolumes()
         await waitUntil { counter.count >= 3 }
         #expect(counter.count >= 3)
-        vm.stopPolling()
-        try await Task.sleep(nanoseconds: 200_000_000) // let an in-flight poll finish
+        await vm.stopPollingAndWait() // joins any in-flight poll
         let after = counter.count
-        try await Task.sleep(nanoseconds: 300_000_000)
+        try await Task.sleep(nanoseconds: 100_000_000)
         #expect(counter.count == after)
     }
 
@@ -65,7 +71,7 @@ struct ViewModelPollingTests {
         vm.listNetworkVolumes()
         vm.listNetworkVolumes()
         await waitUntil { counter.count >= 5 }
-        vm.stopPolling()
+        await vm.stopPollingAndWait()
         #expect(counter.count >= 5)
         #expect(maxActive.count == 1)
     }

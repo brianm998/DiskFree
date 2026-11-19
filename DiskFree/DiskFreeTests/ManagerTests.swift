@@ -65,6 +65,7 @@ struct NetworkProbeTests {
         let ok = NetworkVolume(username: "u", remoteHost: "h", remotePath: "/p",
                                localMount: "/Volumes/ok", type: "smbfs")
         let release = DispatchSemaphore(value: 0)
+        defer { release.signal() }
         let m = Manager()
         await m.setProbeOverride({ path, ts in
             if path == "/Volumes/hung" { release.wait() }
@@ -76,7 +77,6 @@ struct NetworkProbeTests {
         #expect(Date().timeIntervalSince(start) < 3)
         #expect(records["/Volumes/ok"]?.count == 1)
         #expect(records["/Volumes/hung"] == nil)
-        release.signal()
     }
 }
 
