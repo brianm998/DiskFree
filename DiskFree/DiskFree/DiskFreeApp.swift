@@ -7,7 +7,6 @@
 
 import SwiftUI
 
-@main
 struct DiskFreeApp: App {
     init() {
         // Offscreen screenshot rendering: handled before any scene exists,
@@ -31,5 +30,24 @@ struct DiskFreeApp: App {
 //              .windowMinimizeBehaviour(.disabled)
         }
         
+    }
+}
+
+/// Minimal app used when the process only hosts unit tests: no window opens.
+struct TestHostApp: App {
+    var body: some Scene {
+        Settings { EmptyView() }
+    }
+}
+
+@main
+enum DiskFreeLauncher {
+    static func main() {
+        if TestHost.isActive {
+            NSApplication.shared.setActivationPolicy(.prohibited)
+            TestHostApp.main()
+        } else {
+            DiskFreeApp.main()
+        }
     }
 }
