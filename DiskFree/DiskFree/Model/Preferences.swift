@@ -38,39 +38,70 @@ public struct Preferences: Codable, Sendable {
         lowSpaceErrorThresholdGigs = 20
         maxDataAgeMinutes = 60 // one hour
     }
+
+    static let localPollIntervalRange = 1...3600
+    static let networkPollIntervalRange = 5...3600
+    static let maxDataAgeMinutesRange: ClosedRange<TimeInterval> = 1...1440
+
+    /// A copy with the settings that could spin the poll loops clamped into range.
+    func sanitized() -> Preferences {
+        var p = self
+        p.localPollIntervalSeconds = min(max(p.localPollIntervalSeconds, Self.localPollIntervalRange.lowerBound), Self.localPollIntervalRange.upperBound)
+        p.networkPollIntervalSeconds = min(max(p.networkPollIntervalSeconds, Self.networkPollIntervalRange.lowerBound), Self.networkPollIntervalRange.upperBound)
+        let age = p.maxDataAgeMinutes.isFinite ? p.maxDataAgeMinutes : Preferences().maxDataAgeMinutes
+        p.maxDataAgeMinutes = min(max(age, Self.maxDataAgeMinutesRange.lowerBound), Self.maxDataAgeMinutesRange.upperBound)
+        return p
+    }
+
+    /// Tolerant decoding: any missing key takes its default from init().
+    public init(from decoder: Decoder) throws {
+        self.init()
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        localVolumesToShow = try c.decodeIfPresent(Set<String>.self, forKey: .localVolumesToShow) ?? localVolumesToShow
+        localPollIntervalSeconds = try c.decodeIfPresent(Int.self, forKey: .localPollIntervalSeconds) ?? localPollIntervalSeconds
+        networkVolumesToShow = try c.decodeIfPresent(Set<String>.self, forKey: .networkVolumesToShow) ?? networkVolumesToShow
+        networkPollIntervalSeconds = try c.decodeIfPresent(Int.self, forKey: .networkPollIntervalSeconds) ?? networkPollIntervalSeconds
+        showSettingsView = try c.decodeIfPresent(Bool.self, forKey: .showSettingsView) ?? showSettingsView
+        chartType = try c.decodeIfPresent(ChartType.self, forKey: .chartType) ?? chartType
+        showFreeSpace = try c.decodeIfPresent(Bool.self, forKey: .showFreeSpace) ?? showFreeSpace
+        showUsedSpace = try c.decodeIfPresent(Bool.self, forKey: .showUsedSpace) ?? showUsedSpace
+        soundVoiceOnWarnings = try c.decodeIfPresent(Bool.self, forKey: .soundVoiceOnWarnings) ?? soundVoiceOnWarnings
+        soundVoiceOnErrors = try c.decodeIfPresent(Bool.self, forKey: .soundVoiceOnErrors) ?? soundVoiceOnErrors
+        warningVoice = try c.decodeIfPresent(VoiceActor.Voice.self, forKey: .warningVoice) ?? warningVoice
+        errorVoice = try c.decodeIfPresent(VoiceActor.Voice.self, forKey: .errorVoice) ?? errorVoice
+        legendFontSize = try c.decodeIfPresent(CGFloat.self, forKey: .legendFontSize) ?? legendFontSize
+        lowSpaceWarningThresholdGigs = try c.decodeIfPresent(UInt.self, forKey: .lowSpaceWarningThresholdGigs) ?? lowSpaceWarningThresholdGigs
+        lowSpaceErrorThresholdGigs = try c.decodeIfPresent(UInt.self, forKey: .lowSpaceErrorThresholdGigs) ?? lowSpaceErrorThresholdGigs
+        maxDataAgeMinutes = try c.decodeIfPresent(TimeInterval.self, forKey: .maxDataAgeMinutes) ?? maxDataAgeMinutes
+        self = sanitized()
+    }
 }
 
 public actor PreferenceManager {
 
     private var preferences: Preferences?
-    
+
     let preferencesFilename: String
-    
-    init?() {
-        if let documentsDirectory = FileManager.default.urls(for: .documentDirectory,
-                                                             in: .userDomainMask).last
-        {
-            let fileURL = documentsDirectory.appendingPathComponent("Preferences.json")
-            self.preferencesFilename = fileURL.path
-            print("using preferencesFilename \(preferencesFilename)")
-        } else {
-            return nil          // XXX maybe throw error instead?
-        }
+
+    /// `directory` defaults to the user's Documents folder.
+    init?(directory: URL? = nil) {
+        guard let dir = directory ?? FileManager.default.urls(for: .documentDirectory,
+                                                              in: .userDomainMask).last
+        else { return nil }
+        self.preferencesFilename = dir.appendingPathComponent("Preferences.json").path
     }
 
     func set(preferences: Preferences) {
-        self.preferences = preferences
+        self.preferences = preferences.sanitized()
     }
-    
+
     func getPreferences() -> Preferences? { preferences }
-    
+
     func loadPreferences() async throws {
         if FileManager.default.fileExists(atPath: preferencesFilename) {
-            let url = NSURL(fileURLWithPath: preferencesFilename, isDirectory: false) as URL
-            let (data, _) = try await URLSession.shared.data(for: URLRequest(url: url))
-            let decoder = JSONDecoder()
+            let data = try Data(contentsOf: URL(fileURLWithPath: preferencesFilename))
             do {
-                self.preferences = try decoder.decode(Preferences.self, from: data)
+                self.preferences = try JSONDecoder().decode(Preferences.self, from: data)
             } catch {
                 print("cannot load preferences: \(error)")
             }
@@ -78,20 +109,9 @@ public actor PreferenceManager {
     }
 
     func writePreferences() throws {
-        if FileManager.default.fileExists(atPath: preferencesFilename) {
-            // blow away any existing file
-            try FileManager.default.removeItem(atPath: preferencesFilename)
-        }
-
-        // write out new file
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
-        
         let jsonData = try encoder.encode(self.preferences)
-
-        FileManager.default.createFile(atPath: preferencesFilename,
-                                       contents: jsonData,
-                                       attributes: nil)
-        
+        try jsonData.write(to: URL(fileURLWithPath: preferencesFilename), options: [.atomic])
     }
 }
