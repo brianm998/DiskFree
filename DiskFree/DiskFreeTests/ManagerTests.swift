@@ -36,6 +36,131 @@ struct ManagerTests {
     }
 }
 
+extension LocalProbeSeam {
+    static func fake(mountOn: @escaping @Sendable (String) -> String,
+                     capacity: @escaping @Sendable (String) -> (important: Int, opportunistic: Int)? = { _ in (900, 950) },
+                     uuid: @escaping @Sendable (String) -> String? = { _ in nil },
+                     statfs: (@Sendable (String) -> Void)? = nil) -> LocalProbeSeam
+    {
+        LocalProbeSeam(
+            statfs: { path, ts in
+                statfs?(path)
+                return LocalStatfs(mountOn: mountOn(path),
+                                   size: SizeInfo(importantCapacity: 800, opportunisticCapacity: 800,
+                                                  totalCapacity: 1000, timestamp: ts))
+            },
+            capacity: capacity, uuid: uuid)
+    }
+}
+
+final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var n = 0
+    private var live = 0
+    private(set) var maxLive = 0
+    var count: Int { lock.lock(); defer { lock.unlock() }; return n }
+    func hit() { lock.lock(); n += 1; lock.unlock() }
+    func enter() { lock.lock(); live += 1; maxLive = max(maxLive, live); lock.unlock() }
+    func leave() { lock.lock(); live -= 1; lock.unlock() }
+}
+
+struct LocalProbeTests {
+    func vol(_ name: String, _ path: String, uuid: String? = nil) -> LocalVolume {
+        LocalVolume(name: name, mountPoint: path, userVisibleMountPoint: path,
+                    isInternal: true, isEjectable: true, uuid: uuid)
+    }
+
+    @Test func stalledVolumeDelaysNeitherOthersNorNetworkPoll() async throws {
+        let release = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        let m = Manager()
+        await m.setLocalProbe(.fake(mountOn: { $0 }, statfs: { if $0 == "/hung" { release.wait() } }),
+                              timeout: 0.5)
+        await m.set(volumes: [vol("h", "/hung"), vol("a", "/a"), vol("b", "/b")])
+        let net = NetworkVolume(username: "u", remoteHost: "h", remotePath: "/p",
+                                localMount: "/Volumes/n", type: "smbfs")
+        await m.setOverrides(mountListing: { [net] }, networkSize: { _, ts in
+            SizeInfo(importantCapacity: 1, opportunisticCapacity: 1, totalCapacity: 2, timestamp: ts)
+        })
+        let start = Date()
+        async let local = m.recordLocalVolumeSizes()
+        async let network = m.recordNetworkVolumeSizes()
+        let (records, (_, netRecords)) = try await (local, network)
+        #expect(Date().timeIntervalSince(start) < 3)
+        #expect(records["/a"]?.count == 1)
+        #expect(records["/b"]?.count == 1)
+        #expect(records["/hung"] == nil)
+        #expect(netRecords["/Volumes/n"]?.count == 1)
+    }
+
+    @Test func atMostOneProbePerVolumeInFlight() async throws {
+        let release = DispatchSemaphore(value: 0)
+        let c = Counter()
+        let m = Manager()
+        await m.setLocalProbe(.fake(mountOn: { $0 }, statfs: { _ in
+            c.enter(); c.hit(); release.wait(); c.leave()
+        }), timeout: 0.2)
+        await m.set(volumes: [vol("h", "/hung")])
+        _ = try await m.recordLocalVolumeSizes()
+        _ = try await m.recordLocalVolumeSizes()
+        _ = try await m.recordLocalVolumeSizes()
+        #expect(c.count == 1)
+        #expect(c.maxLive == 1)
+        release.signal()
+    }
+
+    @Test func importantUsageLookedUpOncePerMinutePerVolume() async throws {
+        let c = Counter()
+        let now = Locked(Date(timeIntervalSince1970: 1_000_000))
+        let m = Manager()
+        await m.setClock { now.value }
+        await m.setLocalProbe(.fake(mountOn: { $0 }, capacity: { _ in c.hit(); return (900, 950) }))
+        await m.set(volumes: [vol("a", "/a")])
+        var records = try await m.recordLocalVolumeSizes()
+        now.value += 4
+        _ = try await m.recordLocalVolumeSizes()
+        now.value += 4
+        records = try await m.recordLocalVolumeSizes()
+        #expect(c.count == 1)
+        // purgeable offset (900 - 800) is applied to the statfs value
+        #expect(records["/a"]?.last?.importantCapacity == 900)
+        #expect(records["/a"]?.last?.opportunisticCapacity == 950)
+        now.value += 60
+        _ = try await m.recordLocalVolumeSizes()
+        #expect(c.count == 2)
+    }
+
+    @Test func wrongMountPointRecordsNothingAndRequestsRelist() async throws {
+        let m = Manager()
+        await m.setLocalProbe(.fake(mountOn: { _ in "/" }))
+        await m.set(volumes: [vol("x", "/Volumes/x")])
+        let records = try await m.recordLocalVolumeSizes()
+        #expect(records["/Volumes/x"] == nil)
+        #expect(await m.takeRelistRequest())
+        #expect(await m.takeRelistRequest() == false)
+    }
+
+    @Test func wrongUUIDRecordsNothing() async throws {
+        let m = Manager()
+        let good = UUID().uuidString
+        await m.setLocalProbe(.fake(mountOn: { $0 }, uuid: { _ in UUID().uuidString }))
+        await m.set(volumes: [vol("x", "/Volumes/x", uuid: good)])
+        let records = try await m.recordLocalVolumeSizes()
+        #expect(records[good] == nil)
+        #expect(await m.takeRelistRequest())
+    }
+}
+
+final class Locked<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var v: T
+    init(_ v: T) { self.v = v }
+    var value: T {
+        get { lock.lock(); defer { lock.unlock() }; return v }
+        set { lock.lock(); v = newValue; lock.unlock() }
+    }
+}
+
 struct VolumeKeyTests {
     func vol(_ name: String, _ path: String, uuid: String? = nil) -> LocalVolume {
         LocalVolume(name: name, mountPoint: path, userVisibleMountPoint: path,
@@ -58,6 +183,8 @@ struct VolumeKeyTests {
 
     @Test func sameNamedVolumesKeepSeparateRecordsWithoutDuplicateTimestamps() async throws {
         let m = Manager()
+        // temp dirs are not mount points, so stand in for statfs
+        await m.setLocalProbe(.fake(mountOn: { $0 }))
         await m.set(volumes: [vol("Untitled", try tempDir(), uuid: u1),
                               vol("Untitled", try tempDir(), uuid: u2)])
         _ = try await m.recordLocalVolumeSizes()
