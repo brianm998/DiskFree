@@ -400,3 +400,17 @@ struct KnownShareTests {
         #expect(await m.knownShareMounts.isEmpty)
     }
 }
+
+struct VolumeFilterTests {
+    func keep(ro: Bool, root: Bool = false, image: Bool = false, local: Bool = true, browsable: Bool = true) -> Bool {
+        LocalVolume.shouldList(isLocal: local, isBrowsable: browsable, isReadOnly: ro,
+                               isRoot: root, isDiskImage: image)
+    }
+    @Test func readOnlyPhysicalKept() { #expect(keep(ro: true)) }
+    @Test func readOnlyDiskImageSkipped() { #expect(!keep(ro: true, image: true)) }
+    @Test func writableKept() { #expect(keep(ro: false)) }
+    @Test func nonBrowsableSkipped() { #expect(!keep(ro: false, browsable: false)) }
+    @Test func nonBrowsableReadOnlySkipped() { #expect(!keep(ro: true, browsable: false)) }
+    @Test func rootKept() { #expect(keep(ro: true, root: true)) }
+    @Test func nonLocalSkipped() { #expect(!keep(ro: false, local: false)) }
+}

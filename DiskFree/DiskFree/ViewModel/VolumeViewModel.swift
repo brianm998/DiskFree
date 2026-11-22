@@ -426,7 +426,8 @@ class VolumeViewModel: Identifiable,
         
         if let lastSize = self.lastSize { lastSizeStr = "\(lastSize.totalSize) " }
 
-        return "\(lastSizeStr)\(volumeType) Volume \(volume.name)\n is mounted on \(volume.mountPath)"
+        let readOnly = volume.isReadOnly ? " (read-only)" : ""
+        return "\(lastSizeStr)\(volumeType) Volume \(volume.name)\(readOnly)\n is mounted on \(volume.mountPath)"
     }
 }
 

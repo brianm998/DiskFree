@@ -1,4 +1,5 @@
 import Foundation
+import DiskArbitration
 import os
 
 /*
@@ -217,6 +218,21 @@ public actor Manager: Sendable {
         return Self.rootSymlinkMap(from: links)
     }
 
+    /// True when DiskArbitration says the volume is a mounted disk image.
+    /// DADiskCreateFromVolumePath only reads the mount table, so it needs no
+    /// entitlement in the app sandbox.  If it can't answer, the volume is
+    /// treated as a physical drive (shown rather than hidden).
+    static func isDiskImage(url: URL) -> Bool {
+        guard let session = DASessionCreate(kCFAllocatorDefault),
+              let disk = DADiskCreateFromVolumePath(kCFAllocatorDefault, session, url as CFURL),
+              let desc = DADiskCopyDescription(disk) as? [String: Any]
+        else { return false }
+        let model = (desc[kDADiskDescriptionDeviceModelKey as String] as? String)?
+            .trimmingCharacters(in: .whitespaces)
+        let proto = desc[kDADiskDescriptionDeviceProtocolKey as String] as? String
+        return model == "Disk Image" || proto == "Virtual Interface"
+    }
+
     func listLocalVolumes() async throws -> [LocalVolume] {
         if let localListingOverride {
             let ret = try await localListingOverride()
@@ -244,13 +260,18 @@ public actor Manager: Sendable {
         for url in urls {
             do {
                 let values = try url.resourceValues(forKeys: Set(keys))
-                guard values.volumeIsLocal == true,
-                      values.volumeIsBrowsable == true,
-                      let isRoot = values.volumeIsRootFileSystem,
+                guard let isRoot = values.volumeIsRootFileSystem,
                       let volumeName = values.volumeName
                 else { continue }
-                // the sealed system volume is read only but must be listed
-                if values.volumeIsReadOnly == true && !isRoot { continue }
+                let isReadOnly = values.volumeIsReadOnly == true
+                // only read-only volumes need the (costlier) disk image check
+                let isDiskImage = isReadOnly && !isRoot && Self.isDiskImage(url: url)
+                guard LocalVolume.shouldList(isLocal: values.volumeIsLocal == true,
+                                             isBrowsable: values.volumeIsBrowsable == true,
+                                             isReadOnly: isReadOnly,
+                                             isRoot: isRoot,
+                                             isDiskImage: isDiskImage)
+                else { continue }
 
                 let mountPoint = url.path
                 // the user visible mount point is still a valid path,
@@ -267,7 +288,8 @@ public actor Manager: Sendable {
                                        userVisibleMountPoint: userVisibleMountPoint,
                                        isInternal: values.volumeIsInternal ?? false,
                                        isEjectable: values.volumeIsEjectable ?? false,
-                                       uuid: values.volumeUUIDString))
+                                       uuid: values.volumeUUIDString,
+                                       isReadOnly: isReadOnly))
             } catch {
                 Log.volumes.error("error: \(error, privacy: .public)")
             }
