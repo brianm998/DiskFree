@@ -38,77 +38,59 @@ struct CombinedChartPlot: View {
 //            let dotSize = 24//lineWidth*4
             ForEach(self.viewModel.allVolumes) { volumeView in
                 if volumeView.isSelected {
+                    let points = volumeView.chartSizes
+                    let color = volumeView.lineColor
                     if showFree {
-                        ForEach(volumeView.chartSizes) { sizeData in
-                            LineMark(
-                              x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
-		              y: .value("Gigabytes Free", sizeData.gigsFree),
-                              series: .value(volumeView.volume.name,
-                                             "\(volumeView.volume.name)1")
-                            )
-                              .interpolationMethod(.catmullRom)
-                              .foregroundStyle(volumeView.lineColor)
-                              .lineStyle(StrokeStyle(lineWidth: 4,
-                                                     lineCap: .round, // .butt .square
-                                                     lineJoin: .round, //.miter .bevel
-                                                     miterLimit: 0,
-                                                     dash: [12],
-                                                     dashPhase: 0))
-                        }
-                        if volumeView.chartSizes.count > 0 {
-                            let sizeData = volumeView.chartSizes[0]
-                            PointMark(
-                              x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
-		              y: .value("Gigabytes Free", sizeData.gigsFree)
-                            )
+                        LinePlot(points,
+                                 x: .value("time", \.date),
+                                 y: .value("Gigabytes Free", \.gigsFree),
+                                 series: .value("segment", \.segment))
+                          .interpolationMethod(.catmullRom)
+                          .foregroundStyle(color)
+                          .lineStyle(StrokeStyle(lineWidth: 4,
+                                                 lineCap: .round,
+                                                 lineJoin: .round,
+                                                 miterLimit: 0,
+                                                 dash: [12],
+                                                 dashPhase: 0))
+                        if let first = points.first {
+                            PointMark(x: .value("time", first.date),
+                                      y: .value("Gigabytes Free", first.gigsFree))
                               .symbolSize(16)
-                              .foregroundStyle(volumeView.lineColor)
+                              .foregroundStyle(color)
                               .annotation(position: .leading, alignment: .bottom) {
                                   Text(volumeView.volume.mountPath)
                                     .font(.system(size: 22))
-                                    .foregroundStyle(volumeView.lineColor)
+                                    .foregroundStyle(color)
                                     .frame(maxWidth: 50)
-                                    .blinking(if: volumeView.showLowSpaceWarning,
-                                                duration: 0.4)
-                              } 
+                              }
                         }
-                        if let sizeData = volumeView.lastSize {
+                        if let end = points.last {
                             if volumeView.isMostFull {
-                                PointMark(
-                                  x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
-		                  y: .value("Gigabytes Free", sizeData.gigsFree)
-                                )
+                                PointMark(x: .value("time", end.date),
+                                          y: .value("Gigabytes Free", end.gigsFree))
                                   .symbolSize(16)
-                                  .foregroundStyle(volumeView.lineColor)
+                                  .foregroundStyle(color)
                                   .annotation(position: .leading, alignment: .top) {
                                       Text(volumeView.volume.name)
                                         .font(.system(size: 22))
-                                        .foregroundStyle(volumeView.weightAdjustedColor)
-                                        .blinking(if: volumeView.showLowSpaceWarning,
-                                                    duration: 0.4)
-                                  } 
-
+                                        .foregroundStyle(color)
+                                  }
                             } else {
-                                PointMark(
-                                  x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
-		                  y: .value("Gigabytes Free", sizeData.gigsFree)
-                                )
+                                PointMark(x: .value("time", end.date),
+                                          y: .value("Gigabytes Free", end.gigsFree))
                                   .symbolSize(16)
-                                  .foregroundStyle(volumeView.lineColor)
+                                  .foregroundStyle(color)
                             }
                         }
                     }
                     if showUsed {
-                        ForEach(volumeView.chartSizes) { sizeData in
-                            LineMark(
-                              x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
-		              y: .value("Gigabytes Used", sizeData.gigsUsed),
-                              series: .value(volumeView.volume.name,
-                                             "\(volumeView.volume.name)2")
-                            )
-                              .interpolationMethod(.catmullRom)
-			      .foregroundStyle(.red)
-                        }
+                        LinePlot(points,
+                                 x: .value("time", \.date),
+                                 y: .value("Gigabytes Used", \.gigsUsed),
+                                 series: .value("segment", \.segment))
+                          .interpolationMethod(.catmullRom)
+                          .foregroundStyle(.red)
                     }
                 }
             }

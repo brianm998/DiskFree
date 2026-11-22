@@ -13,6 +13,7 @@ struct MultiChartView: View {
                             MultiChartPlot(sizes: volumeView.chartSizes,
                                            showFree: viewModel.preferences.showFreeSpace,
                                            showUsed: viewModel.preferences.showUsedSpace)
+                              .equatable()
                             VStack(alignment: .leading) {
                                 Text(volumeView.volume.name)
                                 if let volumeSize = volumeView.lastSize {
@@ -33,8 +34,8 @@ struct MultiChartView: View {
 
 
 // One volume's chart.  Plain inputs only, no viewModel.preferences reads.
-struct MultiChartPlot: View {
-    let sizes: [SizeInfo]
+struct MultiChartPlot: View, Equatable {
+    let sizes: [VolumeViewModel.ChartPoint]
     let showFree: Bool
     let showUsed: Bool
 
@@ -53,29 +54,27 @@ struct MultiChartPlot: View {
     }
 
     var body: some View {
-                            Chart(sizes) { sizeData in
-                                if showFree {
-                                    AreaMark(
-                                      x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
-			              y: .value("free", sizeData.gigsFree),
-                                      series: .value("G", "b"),
-                                      stacking: .unstacked
-			            )
-			              .lineStyle(StrokeStyle(lineWidth: 2))
-			              .foregroundStyle(greenGradientColor)
-			              .interpolationMethod(.cardinal)
-                                }
-                                if showUsed {
-                                    AreaMark(
-                                      x: .value("time", Date(timeIntervalSince1970: sizeData.timestamp)),
-			              y: .value("used", sizeData.gigsUsed),
-                                      series: .value("f", "a"),
-                                      stacking: .unstacked
-			            )
-			              .lineStyle(StrokeStyle(lineWidth: 2))
-			              .foregroundStyle(redGradientColor)
-			              .interpolationMethod(.cardinal)
-                                }
-                            }
+        Chart {
+            if showFree {
+                AreaPlot(sizes,
+                         x: .value("time", \.date),
+                         y: .value("free", \.gigsFree),
+                         series: .value("G", \.segment),
+                         stacking: .unstacked)
+                  .lineStyle(StrokeStyle(lineWidth: 2))
+                  .foregroundStyle(greenGradientColor)
+                  .interpolationMethod(.cardinal)
+            }
+            if showUsed {
+                AreaPlot(sizes,
+                         x: .value("time", \.date),
+                         y: .value("used", \.gigsUsed),
+                         series: .value("f", \.segment),
+                         stacking: .unstacked)
+                  .lineStyle(StrokeStyle(lineWidth: 2))
+                  .foregroundStyle(redGradientColor)
+                  .interpolationMethod(.cardinal)
+            }
+        }
     }
 }

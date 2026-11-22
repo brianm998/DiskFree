@@ -32,6 +32,11 @@ public final class ViewModel {
         if sorted.map(\.id) != allVolumes.map(\.id) {
             allVolumes = sorted
         }
+        // Separate layout: local volumes by free space, then network volumes
+        let separate = localVolumes.sorted { $0.lastFreeSize() > $1.lastFreeSize() } + networkVolumes
+        if separate.map(\.id) != localVolumesSortedByEmptyFirst.map(\.id) {
+            localVolumesSortedByEmptyFirst = separate
+        }
     }
     
     var preferences = Preferences() {
@@ -46,12 +51,32 @@ public final class ViewModel {
         for v in localVolumes + networkVolumes {
             if v.lowSpaceWarningThresholdGigs != warning { v.lowSpaceWarningThresholdGigs = warning }
             if v.lowSpaceErrorThresholdGigs != error { v.lowSpaceErrorThresholdGigs = error }
+            v.retentionSeconds = preferences.maxDataAgeMinutes * 60
         }
     }
     
     var warningLocalVolumes: Set<String> = []
     var errorLocalVolumes: Set<String> = []
-    var volumeRecordsTimeDurationSeconds: TimeInterval = 0
+    var volumeRecordsTimeDurationSeconds: TimeInterval = 0 {
+        didSet { updateToolbarDuration() }
+    }
+
+    /// Toolbar text; whole minutes (seconds under a minute), so it changes
+    /// once a minute rather than every poll.  Empty when there is no data.
+    private(set) var toolbarDurationText: String = ""
+
+    private func updateToolbarDuration() {
+        let secs = volumeRecordsTimeDurationSeconds
+        let text: String
+        if secs <= 0 {
+            text = ""
+        } else if secs < 60 {
+            text = "The last \(Int(secs)) seconds of free space"
+        } else {
+            text = "The last \(Int(secs / 60)) minutes of free space"
+        }
+        if text != toolbarDurationText { toolbarDurationText = text }
+    }
 
     private var cancellables: Set<AnyCancellable> = []
 
@@ -108,11 +133,8 @@ public final class ViewModel {
         savePreferences()
     }
 
-    var localVolumesSortedByEmptyFirst: [VolumeViewModel] {
-        localVolumes.sorted { (a: VolumeViewModel, b: VolumeViewModel) in
-            a.lastFreeSize() > b.lastFreeSize()
-        } + networkVolumes
-    }
+    /// Separate-layout order; stored (see refreshAllVolumes), not sorted in body
+    private(set) var localVolumesSortedByEmptyFirst: [VolumeViewModel] = []
 
     /// false in tests: skip writing record and preference files
     var persistsToDisk = !TestHost.isActive
@@ -527,8 +549,7 @@ public final class ViewModel {
         var currentHue = minHue 
         
         for volumeViewModel in volumesEmptyFirst {
-            volumeViewModel.isMostFull = false
-            volumeViewModel.isMostEmpty = false
+            // guarded below: every poll must not invalidate the chart
 
             if firstSelectedViewModel == nil {
                 firstSelectedViewModel = volumeViewModel
@@ -544,17 +565,17 @@ public final class ViewModel {
             // 0.75 - purple
             // 1.00 - red again
             
-            volumeViewModel.lineColor = Color(hue: currentHue, saturation: 1, brightness: 1)
+            let hueColor = Color(hue: currentHue, saturation: 1, brightness: 1)
+            if volumeViewModel.lineColor != hueColor { volumeViewModel.lineColor = hueColor }
             currentHue += hueStep
             lastSelectedViewModel = volumeViewModel
         }
 
-        if let lastSelectedViewModel {
-            lastSelectedViewModel.isMostFull = true
-        }
-
-        if let firstSelectedViewModel {
-            firstSelectedViewModel.isMostEmpty = true
+        for v in self.allVolumes {
+            let full = v === lastSelectedViewModel
+            let empty = v === firstSelectedViewModel
+            if v.isMostFull != full { v.isMostFull = full }
+            if v.isMostEmpty != empty { v.isMostEmpty = empty }
         }
     }
     
