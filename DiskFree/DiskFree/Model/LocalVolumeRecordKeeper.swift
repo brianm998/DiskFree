@@ -9,22 +9,20 @@ public actor LocalVolumeRecordKeeper {
 
     let recordFilename: String
     
-    init?() {
-        if let documentsDirectory = FileManager.default.urls(for: .documentDirectory,
-                                                             in: .userDomainMask).last
-        {
-            let fileURL = documentsDirectory.appendingPathComponent("LocalVolumeRecords.json")
-            self.recordFilename = fileURL.path
-            print("starting with recordFilename \(recordFilename)")
-        } else {
-            return nil 
-        }
+    /// number of completed writes (for tests)
+    private(set) var saveCount = 0
+
+    /// `directory` defaults to the user's Documents folder.
+    init?(directory: URL? = nil) {
+        guard let dir = directory ?? FileManager.default.urls(for: .documentDirectory,
+                                                              in: .userDomainMask).last
+        else { return nil }
+        self.recordFilename = dir.appendingPathComponent("LocalVolumeRecords.json").path
     }
-    
+
     func loadRecords() async throws -> LocalVolumeRecords {
         if FileManager.default.fileExists(atPath: recordFilename) {
-            let url = NSURL(fileURLWithPath: recordFilename, isDirectory: false) as URL
-            let (data, _) = try await URLSession.shared.data(for: URLRequest(url: url))
+            let data = try Data(contentsOf: URL(fileURLWithPath: recordFilename))
             let decoder = JSONDecoder()
             return try decoder.decode(LocalVolumeRecords.self, from: data)
         } else {
@@ -34,18 +32,8 @@ public actor LocalVolumeRecordKeeper {
     }
 
     func save(records: LocalVolumeRecords) async throws {
-        if FileManager.default.fileExists(atPath: recordFilename) {
-            // blow away any existing file
-            try FileManager.default.removeItem(atPath: recordFilename)
-        }
-
-        // write out new file
-        let encoder = JSONEncoder()
-        let jsonData = try encoder.encode(records)
-        FileManager.default.createFile(atPath: recordFilename,
-                                       contents: jsonData,
-                                       attributes: nil)
+        let jsonData = try JSONEncoder().encode(records)
+        try jsonData.write(to: URL(fileURLWithPath: recordFilename), options: [.atomic])
+        saveCount += 1
     }
 }
-
-

@@ -40,8 +40,21 @@ public final class ViewModel {
     }
     
     var preferences = Preferences() {
-        didSet { pushThresholdsToVolumes() }
+        didSet {
+            // clamp settings that could spin the poll loops
+            let clean = preferences.sanitized()
+            if clean.localPollIntervalSeconds != preferences.localPollIntervalSeconds
+                || clean.networkPollIntervalSeconds != preferences.networkPollIntervalSeconds
+                || clean.maxDataAgeMinutes != preferences.maxDataAgeMinutes
+            {
+                preferences = clean
+            }
+            pushThresholdsToVolumes()
+        }
     }
+
+    /// clamp preferences in place (call after the user edits a setting)
+    func sanitizePreferences() { preferences = preferences.sanitized() }
 
     /// keep every volume's low-space thresholds in step with preferences;
     /// only assigns on change so unrelated edits don't invalidate volume views
@@ -93,27 +106,115 @@ public final class ViewModel {
 
     func applyDemoColors() { applyColors() }
 
-    init() {
+    /// Loads the stored preferences (nil when there are none). Replaceable in tests.
+    typealias PreferenceLoader = @Sendable () async -> Preferences?
+
+    /// Completes once the stored preferences have been applied.  Discovery and the
+    /// first network reconcile await it so the saved choices are in place first.
+    private(set) var preferencesLoaded: Task<Void, Never>?
+
+    init(preferenceLoader: PreferenceLoader? = nil) {
         self.isDemo = false
         Speaker.warmVoiceCache()
-        Task.detached {
-            // try to load load preferences from file
-            try? await self.preferenceManager?.loadPreferences()
-            if let preferenceManager = self.preferenceManager,
-               let preferences = await preferenceManager.getPreferences()
-            {
-                await MainActor.run {
-                    self.preferences = preferences
-                }
-              await self.manager.set(maxDataAgeMinutes: preferences.maxDataAgeMinutes)
-            }
+        observeTermination()
+        let loader: PreferenceLoader = preferenceLoader ?? { [preferenceManager] in
+            try? await preferenceManager?.loadPreferences()
+            return await preferenceManager?.getPreferences()
+        }
+        preferencesLoaded = Task { [weak self] in
+            guard let loaded = await loader() else { return }
+            let clean = loaded.sanitized()
+            guard let self else { return }
+            self.preferences = clean
+            await self.manager.set(maxDataAgeMinutes: clean.maxDataAgeMinutes)
         }
     }
-    
+
     let manager = Manager()
 
-    let localVolumeRecordKeeper = LocalVolumeRecordKeeper()
-    let networkVolumeRecordKeeper = NetworkVolumeRecordKeeper()
+    /// replaceable in tests (point them at a temporary directory)
+    var localVolumeRecordKeeper = LocalVolumeRecordKeeper()
+    var networkVolumeRecordKeeper = NetworkVolumeRecordKeeper()
+
+    /// records are written to disk at most this often while polling
+    nonisolated static let recordSaveInterval: TimeInterval = 5 * 60
+    /// clock for the save policy; replaceable in tests
+    var now: () -> Date = { Date() }
+    private var lastRecordSave: Date?
+    private var pendingLocalRecords: LocalVolumeRecords?
+    private var pendingNetworkRecords: NetworkVolumeRecords?
+    private var saveTask: Task<Void, Never>?
+
+    /// Queue a save if the interval has passed (or `force`).  Superseded
+    /// requests are dropped: only the newest records are written.
+    private func requestRecordSave(local: LocalVolumeRecords? = nil,
+                                   network: NetworkVolumeRecords? = nil,
+                                   force: Bool = false)
+    {
+        guard persistsToDisk, !isDemo else { return }
+        if let local { newLocalVolumeSizes = local }
+        if let network { newNetworkVolumeSizes = network }
+        let t = now()
+        if !force {
+            if let last = lastRecordSave, t.timeIntervalSince(last) < Self.recordSaveInterval { return }
+        }
+        lastRecordSave = t
+        if !newLocalVolumeSizes.isEmpty { pendingLocalRecords = newLocalVolumeSizes }
+        if !newNetworkVolumeSizes.isEmpty { pendingNetworkRecords = newNetworkVolumeSizes }
+        if saveTask == nil { startSaveTask() }
+    }
+
+    private func startSaveTask() {
+        saveTask = Task { [weak self] in
+            while let self, let (l, n) = self.takePending() {
+                if let l {
+                    do { try await self.localVolumeRecordKeeper?.save(records: l) }
+                    catch { print("cannot save local volume records: \(error)") }
+                }
+                if let n {
+                    do { try await self.networkVolumeRecordKeeper?.save(records: n) }
+                    catch { print("cannot save network volume records: \(error)") }
+                }
+            }
+            self?.saveTask = nil
+        }
+    }
+
+    private func takePending() -> (LocalVolumeRecords?, NetworkVolumeRecords?)? {
+        if pendingLocalRecords == nil && pendingNetworkRecords == nil { return nil }
+        defer { pendingLocalRecords = nil; pendingNetworkRecords = nil }
+        return (pendingLocalRecords, pendingNetworkRecords)
+    }
+
+    /// Write the latest records now (window closed, app terminating).
+    func saveRecordsNow() { requestRecordSave(force: true) }
+
+    /// Wait for any queued record save to finish (tests).
+    func flushSaves() async { await saveTask?.value }
+
+    private var terminationObserver: NSObjectProtocol?
+    func observeTermination() {
+        guard terminationObserver == nil, !isDemo else { return }
+        terminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main)
+        { [weak self] _ in
+            MainActor.assumeIsolated { self?.writeRecordsSynchronously() }
+        }
+    }
+
+    /// Blocking final write; the process may exit right after this returns.
+    private func writeRecordsSynchronously() {
+        guard persistsToDisk else { return }
+        let l = newLocalVolumeSizes, n = newNetworkVolumeSizes
+        let lk = localVolumeRecordKeeper, nk = networkVolumeRecordKeeper
+        let done = DispatchSemaphore(value: 0)
+        Task.detached {
+            if !l.isEmpty { try? await lk?.save(records: l) }
+            if !n.isEmpty { try? await nk?.save(records: n) }
+            done.signal()
+        }
+        _ = done.wait(timeout: .now() + 5)
+    }
     
     let preferenceManager = PreferenceManager()
     
@@ -140,6 +241,19 @@ public final class ViewModel {
     var persistsToDisk = !TestHost.isActive
     /// test seam: the async preference load in init() would overwrite preferences
     var networkPollIntervalOverride: Int?
+    /// test seam, like networkPollIntervalOverride (bypasses the clamp)
+    var localPollIntervalOverride: Int?
+
+    /// interval the local loop actually sleeps: preference clamped to its range
+    nonisolated static func effectiveLocalInterval(_ seconds: Int) -> Int {
+        min(max(seconds, Preferences.localPollIntervalRange.lowerBound), Preferences.localPollIntervalRange.upperBound)
+    }
+    nonisolated static func effectiveNetworkInterval(_ seconds: Int) -> Int {
+        min(max(seconds, Preferences.networkPollIntervalRange.lowerBound), Preferences.networkPollIntervalRange.upperBound)
+    }
+    var currentLocalPollInterval: Int {
+        localPollIntervalOverride ?? Self.effectiveLocalInterval(preferences.localPollIntervalSeconds)
+    }
 
     func listNetworkVolumes() {
         if networkVolumeTask != nil { return }
@@ -165,6 +279,7 @@ public final class ViewModel {
 
     /// One network poll.  Returns the poll interval, or nil if cancelled.
     private func networkPollOnce() async -> Int? {
+        await preferencesLoaded?.value
         do {
             let (newNetworkVolumes, sizeRecords) =
               try await manager.recordNetworkVolumeSizes()
@@ -193,6 +308,7 @@ public final class ViewModel {
                     let viewModel = VolumeViewModel(volume: newVolume,
                                                     color: .purple,
                                                     preferences: preferences)
+                    viewModel.isSelected = !preferences.networkVolumesHidden.contains(newVolume.localMount)
                     if let sizes = sizeRecords[newVolume.name] {
                         viewModel.sizes = sizes
                     }
@@ -204,7 +320,7 @@ public final class ViewModel {
         } catch {
             print("ERROR: \(error)")
         }
-        return networkPollIntervalOverride ?? preferences.networkPollIntervalSeconds
+        return networkPollIntervalOverride ?? Self.effectiveNetworkInterval(preferences.networkPollIntervalSeconds)
     }
 
     func listLocalVolumes() {
@@ -221,12 +337,12 @@ public final class ViewModel {
         }
     }
 
-    private func discoverLocalVolumes() async throws -> [LocalVolume] {
+    func discoverLocalVolumes(listing: (() async throws -> [LocalVolume])? = nil) async throws -> [LocalVolume] {
+        await preferencesLoaded?.value
         await manager.loadStoredLocalVolumeRecords()
-        let volumes = try await manager.listLocalVolumes()
-        if preferences.localVolumesToShow.count == 0 {
-            preferences.localVolumesToShow = Set(volumes.map { $0.name })
-        }
+        let volumes: [LocalVolume]
+        if let listing { volumes = try await listing() } else { volumes = try await manager.listLocalVolumes() }
+        migrateLegacySelection(discovered: volumes)
         var colorIndex = 0
         localVolumes = volumes.map {
             let ret = VolumeViewModel(volume: $0,
@@ -234,7 +350,7 @@ public final class ViewModel {
                                       preferences: preferences)
             colorIndex += 1
             if colorIndex >= lineColors.count { colorIndex = 0 }
-            ret.isSelected = preferences.localVolumesToShow.contains($0.name)
+            ret.isSelected = !preferences.localVolumesHidden.contains($0.name)
             return ret
         }
         return volumes
@@ -253,6 +369,7 @@ public final class ViewModel {
         listingTask = nil
         localVolumeTask = nil
         networkVolumeTask = nil
+        saveRecordsNow()
     }
 
     /// Like stopPolling(), but returns only after the cancelled loops have finished.
@@ -335,13 +452,26 @@ public final class ViewModel {
     func clearAll() {
         for volumeViewModel in localVolumes {
             volumeViewModel.isSelected = false
+            preferences.localVolumesHidden.insert(volumeViewModel.volume.name)
         }
+        savePreferences()
     }
 
     func selectAll() {
         for volumeViewModel in localVolumes {
             volumeViewModel.isSelected = true
+            preferences.localVolumesHidden.remove(volumeViewModel.volume.name)
         }
+        savePreferences()
+    }
+
+    /// An older preferences file only had the set of volumes to show.  Use it once:
+    /// hide the discovered volumes that are not in it.
+    func migrateLegacySelection(discovered volumes: [LocalVolume]) {
+        guard let legacy = preferences.legacyLocalVolumesToShow else { return }
+        preferences.legacyLocalVolumesToShow = nil
+        preferences.localVolumesHidden = Set(volumes.map { $0.name }).subtracting(legacy)
+        savePreferences()
     }
 
     private func potentialSizeAudio(for oldSize: SizeInfo?,
@@ -413,20 +543,11 @@ public final class ViewModel {
 
      */
 
-    private func networkRecordViewUpdate(volumes: [NetworkVolume],
+    func networkRecordViewUpdate(volumes: [NetworkVolume],
                                          records: NetworkVolumeRecords,
                                          shouldSave: Bool = true) async
     {
-        if shouldSave && persistsToDisk {
-            // save them for later
-            Task.detached {
-                do {
-                    try await self.networkVolumeRecordKeeper?.save(records: records)
-                } catch {
-                    print("cannot save network volume records: \(error)")
-                }
-            }
-        }
+        if shouldSave { requestRecordSave(network: records) }
 
 
         await MainActor.run {
@@ -446,21 +567,12 @@ public final class ViewModel {
         // XXX still don't have alerts for network drives
     }
 
-    private func localRecordViewUpdate(records: LocalVolumeRecords,
+    func localRecordViewUpdate(records: LocalVolumeRecords,
                                        duration: TimeInterval,
                                        shouldSave: Bool = true) async
     {
 
-        if shouldSave && persistsToDisk {
-            // save them for later
-            Task.detached {
-                do {
-                    try await self.localVolumeRecordKeeper?.save(records: records)
-                } catch {
-                    print("cannot save local volume records: \(error)")
-                }
-            }
-        }
+        if shouldSave { requestRecordSave(local: records) }
 
         await MainActor.run {
             self.newLocalVolumeSizes = records
@@ -621,7 +733,7 @@ public final class ViewModel {
         } catch {
             print("ERROR: \(error)")
         }
-        return preferences.localPollIntervalSeconds
+        return currentLocalPollInterval
     }
 
     private func rediscoverLocalVolumes() async {
@@ -651,7 +763,7 @@ public final class ViewModel {
                 let vm = VolumeViewModel(volume: volume,
                                          color: lineColors[localVolumes.count % lineColors.count],
                                          preferences: preferences)
-                vm.isSelected = preferences.localVolumesToShow.contains(volume.name)
+                vm.isSelected = !preferences.localVolumesHidden.contains(volume.name)
                 localVolumes.append(vm)
             }
         }
@@ -669,10 +781,15 @@ public final class ViewModel {
 
     func update(for volumeViewModel: VolumeViewModel? = nil) { 
         if let volumeViewModel {
-            if volumeViewModel.isSelected {
-                self.preferences.localVolumesToShow.insert(volumeViewModel.volume.name)
-            } else {
-                self.preferences.localVolumesToShow.remove(volumeViewModel.volume.name)
+            let name = volumeViewModel.volume.name
+            let hide = !volumeViewModel.isSelected
+            switch volumeViewModel.volume {
+            case .network:
+                if hide { preferences.networkVolumesHidden.insert(name) }
+                else { preferences.networkVolumesHidden.remove(name) }
+            case .local:
+                if hide { preferences.localVolumesHidden.insert(name) }
+                else { preferences.localVolumesHidden.remove(name) }
             }
         }
         savePreferences()

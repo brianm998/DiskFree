@@ -100,7 +100,6 @@ enum ScreenshotMode {
             vm.isSelected = true
             network.append(vm)
         }
-        prefs.localVolumesToShow = Set(local.map { $0.volume.name })
         viewModel.preferences = prefs
         viewModel.localVolumes = local
         viewModel.networkVolumes = network

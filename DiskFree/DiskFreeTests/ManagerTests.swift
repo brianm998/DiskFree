@@ -108,7 +108,7 @@ struct ReconcileTests {
 
     @Test func changedMountPointKeepsViewModel() {
         let vm = ViewModel()
-        vm.preferences.localVolumesToShow = ["A"]
+        vm.preferences.localVolumesHidden = ["B"]
         vm.reconcileLocalVolumes(with: [vol("A", "/Volumes/A")])
         let original = vm.localVolumes[0]
         original.isSelected = false
@@ -125,7 +125,7 @@ struct ReconcileTests {
 
     @Test func newVolumeAppendedAndMissingKept() {
         let vm = ViewModel()
-        vm.preferences.localVolumesToShow = ["A"]
+        vm.preferences.localVolumesHidden = ["B"]
         vm.reconcileLocalVolumes(with: [vol("A", "/Volumes/A")])
         vm.reconcileLocalVolumes(with: [vol("B", "/Volumes/B")])
         #expect(vm.localVolumes.map { $0.volume.name } == ["A", "B"])
