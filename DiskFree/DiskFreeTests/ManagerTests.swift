@@ -139,3 +139,61 @@ struct ReconcileTests {
         #expect(ViewModel.rediscoveryPollCount(pollIntervalSeconds: 0) == 1)
     }
 }
+
+struct KnownShareTests {
+    static func vol(_ m: String) -> NetworkVolume {
+        NetworkVolume(username: "", remoteHost: "h", remotePath: "/p", localMount: m, type: "nfs")
+    }
+    static func ok(_ path: String, _ ts: TimeInterval) -> SizeInfo? {
+        SizeInfo(importantCapacity: 1, opportunisticCapacity: 1, totalCapacity: 2, timestamp: ts)
+    }
+
+    @Test func mountPointMismatchYieldsNoSample() {
+        #expect(Manager.mountMatches(mountOn: "/System/Volumes/Data/mnt/a", expectedMount: "/mnt/a"))
+        #expect(!Manager.mountMatches(mountOn: "/System/Volumes/Data", expectedMount: "/mnt/a"))
+        var fs = statfs()
+        withUnsafeMutableBytes(of: &fs.f_mntonname) { buf in
+            for (i, b) in "/System/Volumes/Data".utf8.enumerated() { buf[i] = b }
+        }
+        fs.f_bsize = 4096; fs.f_blocks = 100; fs.f_bavail = 50; fs.f_bfree = 50
+        #expect(Manager.sample(from: fs, expectedMount: "/mnt/a", timestamp: 1) == nil)
+    }
+
+    @Test func savedKnownSharesAreProbedAfterReload() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let a = Manager()
+        await a.setRecordDirectory(dir)
+        await a.setProbeOverride(Self.ok)
+        await a.setOverrides(mountListing: { [Self.vol("/mnt/a")] }, networkSize: nil)
+        _ = try await a.recordNetworkVolumeSizes()
+
+        let b = Manager()
+        await b.setRecordDirectory(dir)
+        await b.setProbeOverride(Self.ok)
+        await b.setOverrides(mountListing: { [] }, networkSize: nil)
+        _ = await b.loadStoredNetworkVolumeRecords()
+        let (vols, records) = try await b.recordNetworkVolumeSizes()
+        #expect(vols.map(\.localMount) == ["/mnt/a"])
+        #expect(records["/mnt/a"]?.isEmpty == false)
+    }
+
+    @Test func knownSharesExpireAfter24h() async throws {
+        let m = Manager()
+        let t0 = Date()
+        await m.setClock { t0 }
+        await m.setProbeOverride({ _, _ in nil })
+        await m.setOverrides(mountListing: { [Self.vol("/mnt/a")] }, networkSize: nil)
+        _ = try await m.recordNetworkVolumeSizes()
+        #expect(await m.knownShareMounts == ["/mnt/a"])
+        await m.setOverrides(mountListing: { [] }, networkSize: nil)
+        await m.setClock { t0.addingTimeInterval(23 * 3600) }
+        _ = try await m.recordNetworkVolumeSizes()
+        #expect(await m.knownShareMounts == ["/mnt/a"])
+        await m.setClock { t0.addingTimeInterval(25 * 3600) }
+        let (vols, _) = try await m.recordNetworkVolumeSizes()
+        #expect(vols.isEmpty)
+        #expect(await m.knownShareMounts.isEmpty)
+    }
+}

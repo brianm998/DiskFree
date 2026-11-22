@@ -36,4 +36,27 @@ public actor NetworkVolumeRecordKeeper {
         try jsonData.write(to: URL(fileURLWithPath: recordFilename), options: [.atomic])
         saveCount += 1
     }
+
+    // known shares, persisted so idle automounted shares are probed after a relaunch
+    var knownFilename: String {
+        URL(fileURLWithPath: recordFilename).deletingLastPathComponent()
+            .appendingPathComponent("NetworkVolumesKnown.json").path
+    }
+
+    func loadKnown() async throws -> [KnownNetworkVolume] {
+        guard FileManager.default.fileExists(atPath: knownFilename) else { return [] }
+        let data = try Data(contentsOf: URL(fileURLWithPath: knownFilename))
+        return try JSONDecoder().decode([KnownNetworkVolume].self, from: data)
+    }
+
+    func save(known: [KnownNetworkVolume]) async throws {
+        let data = try JSONEncoder().encode(known)
+        try data.write(to: URL(fileURLWithPath: knownFilename), options: [.atomic])
+    }
+}
+
+/// A share remembered across runs, with when it last produced a sample
+struct KnownNetworkVolume: Codable, Sendable, Equatable {
+    var volume: NetworkVolume
+    var lastSample: TimeInterval
 }
