@@ -118,3 +118,34 @@ struct NetworkVolumeStatfsTests {
         #expect(NetworkVolume(statfs: fs) == nil)
     }
 }
+
+struct NetworkVolumeTypeTests {
+    @Test func nfsAutomounted() throws {
+        let v = try #require(NetworkVolume(mountedFrom: "mammoth.local:/volume1/mammoth",
+                                           onPath: "/System/Volumes/Data/mnt/mammoth", fsType: "nfs"))
+        #expect(v.remoteHost == "mammoth.local")
+        #expect(v.remotePath == "/volume1/mammoth")
+        #expect(v.localMount == "/mnt/mammoth")
+        #expect(v.type == "nfs")
+    }
+    @Test func webdav() throws {
+        let v = try #require(NetworkVolume(mountedFrom: "https://dav.example.com/files",
+                                           onPath: "/Volumes/files", fsType: "webdav"))
+        #expect(v.remoteHost == "dav.example.com")
+        #expect(v.remotePath == "/files")
+    }
+    @Test func guestSMB() throws {
+        let v = try #require(NetworkVolume(mountedFrom: "//nas.local/Public", onPath: "/Volumes/Public", fsType: "smbfs"))
+        #expect(v.username == "")
+        #expect(v.remoteHost == "nas.local")
+    }
+    @Test func excluded() {
+        #expect(NetworkVolume(mountedFrom: "map auto_nas", onPath: "/System/Volumes/Data/mnt", fsType: "autofs") == nil)
+        #expect(NetworkVolume(mountedFrom: "x:/y", onPath: "/z", fsType: "nfs", flags: UInt32(MNT_LOCAL)) == nil)
+        #expect(NetworkVolume(mountedFrom: "devfs", onPath: "/dev", fsType: "devfs") == nil)
+    }
+    @Test func unknownTypeKeptWithRawHost() throws {
+        let v = try #require(NetworkVolume(mountedFrom: "weird-source", onPath: "/Volumes/w", fsType: "fancyfs"))
+        #expect(v.remoteHost == "weird-source")
+    }
+}

@@ -14,25 +14,69 @@ struct ManagerTests {
         let m = Manager()
         await m.set(volumes: [vol("bad", bad), vol("good", "/")])
         let records = try await m.recordLocalVolumeSizes()
-        #expect(records["good"]?.count == 1)
-        #expect(records["bad"] == nil)
+        #expect(records["/"]?.count == 1)
+        #expect(records[bad] == nil)
     }
 
     @Test func failingVolumeLastDoesNotAbortPoll() async throws {
         let m = Manager()
         await m.set(volumes: [vol("good", "/"), vol("bad", bad)])
         let records = try await m.recordLocalVolumeSizes()
-        #expect(records["good"]?.count == 1)
+        #expect(records["/"]?.count == 1)
     }
 
     @Test func recoversOnNextPoll() async throws {
         let m = Manager()
         await m.set(volumes: [vol("v", bad)])
         let first = try await m.recordLocalVolumeSizes()
-        #expect(first["v"] == nil)
+        #expect(first[bad] == nil)
         await m.set(volumes: [vol("v", "/")])
         let second = try await m.recordLocalVolumeSizes()
-        #expect(second["v"]?.count == 1)
+        #expect(second["/"]?.count == 1)
+    }
+}
+
+struct VolumeKeyTests {
+    func vol(_ name: String, _ path: String, uuid: String? = nil) -> LocalVolume {
+        LocalVolume(name: name, mountPoint: path, userVisibleMountPoint: path,
+                    isInternal: true, isEjectable: false, uuid: uuid)
+    }
+    let u1 = UUID().uuidString, u2 = UUID().uuidString
+
+    func tempDir() throws -> String {
+        let d = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d.path
+    }
+
+    @Test func keyIsUUIDOrMountPoint() {
+        #expect(vol("a", "/Volumes/a", uuid: u1).key == u1)
+        #expect(vol("a", "/Volumes/a").key == "/Volumes/a")
+        #expect(vol("a", "/Volumes/a", uuid: u1) != vol("a", "/Volumes/a 1", uuid: u2))
+        #expect(vol("a", "/Volumes/a", uuid: u1) == vol("b", "/Volumes/b", uuid: u1))
+    }
+
+    @Test func sameNamedVolumesKeepSeparateRecordsWithoutDuplicateTimestamps() async throws {
+        let m = Manager()
+        await m.set(volumes: [vol("Untitled", try tempDir(), uuid: u1),
+                              vol("Untitled", try tempDir(), uuid: u2)])
+        _ = try await m.recordLocalVolumeSizes()
+        let records = try await m.recordLocalVolumeSizes()
+        #expect(records.count == 2)
+        #expect(records[u1]?.count == 2)
+        #expect(records[u2]?.count == 2)
+        for list in records.values {
+            #expect(Set(list.map(\.timestamp)).count == list.count)
+        }
+    }
+
+    @Test func nameKeysMigrateWhenUnique() {
+        let s = SizeInfo(importantCapacity: 1, opportunisticCapacity: 1, totalCapacity: 2, timestamp: 1)
+        let vols = [vol("A", "/Volumes/A", uuid: u1), vol("Dup", "/Volumes/D1", uuid: u2),
+                    vol("Dup", "/Volumes/D2", uuid: UUID().uuidString)]
+        let stored: LocalVolumeRecords = ["A": [s], "Dup": [s], "Gone": [s], u2: [s]]
+        let out = Manager.migrateNameKeys(stored, volumes: vols) { a, b in a + b }
+        #expect(Set(out.keys) == [u1, u2])
     }
 }
 
@@ -101,19 +145,20 @@ actor Listings {
 
 @MainActor
 struct ReconcileTests {
-    func vol(_ name: String, _ path: String) -> LocalVolume {
+    func vol(_ name: String, _ path: String, uuid: String? = nil) -> LocalVolume {
         LocalVolume(name: name, mountPoint: path, userVisibleMountPoint: path,
-                    isInternal: true, isEjectable: false)
+                    isInternal: true, isEjectable: false, uuid: uuid)
     }
 
     @Test func changedMountPointKeepsViewModel() {
         let vm = ViewModel()
-        vm.preferences.localVolumesHidden = ["B"]
-        vm.reconcileLocalVolumes(with: [vol("A", "/Volumes/A")])
+        vm.preferences.localVolumesHidden = ["/Volumes/B"]
+        let uuid = UUID().uuidString
+        vm.reconcileLocalVolumes(with: [vol("A", "/Volumes/A", uuid: uuid)])
         let original = vm.localVolumes[0]
         original.isSelected = false
         let id = original.id
-        vm.reconcileLocalVolumes(with: [vol("A", "/Volumes/A 1")])
+        vm.reconcileLocalVolumes(with: [vol("A", "/Volumes/A 1", uuid: uuid)])
         #expect(vm.localVolumes.count == 1)
         #expect(vm.localVolumes[0] === original)
         #expect(vm.localVolumes[0].id == id)
@@ -123,9 +168,40 @@ struct ReconcileTests {
         } else { Issue.record("not local") }
     }
 
+    @Test func sameNamedVolumesStaySeparate() {
+        let vm = ViewModel()
+        let u1 = UUID().uuidString, u2 = UUID().uuidString
+        vm.reconcileLocalVolumes(with: [vol("X", "/Volumes/X", uuid: u1), vol("X", "/Volumes/X 1", uuid: u2)])
+        #expect(vm.localVolumes.count == 2)
+    }
+
+    @Test func renameKeepsViewModel() {
+        let vm = ViewModel()
+        let u = UUID().uuidString
+        vm.reconcileLocalVolumes(with: [vol("Old", "/Volumes/Old", uuid: u)])
+        let original = vm.localVolumes[0]
+        original.isSelected = false
+        original.sizes = [SizeInfo(importantCapacity: 1, opportunisticCapacity: 1, totalCapacity: 2, timestamp: 1)]
+        vm.reconcileLocalVolumes(with: [vol("New", "/Volumes/New", uuid: u)])
+        #expect(vm.localVolumes.count == 1)
+        #expect(vm.localVolumes[0] === original)
+        #expect(original.isSelected == false)
+        #expect(original.sizes.count == 1)
+        #expect(original.volume.name == "New")
+    }
+
+    @Test func hiddenNamesMigrateToKeys() {
+        let vm = ViewModel()
+        let u = UUID().uuidString
+        vm.persistsToDisk = false
+        vm.preferences.localVolumesHidden = ["B", "Gone"]
+        vm.migrateHiddenNames(discovered: [vol("A", "/Volumes/A"), vol("B", "/Volumes/B", uuid: u)])
+        #expect(vm.preferences.localVolumesHidden == [u])
+    }
+
     @Test func newVolumeAppendedAndMissingKept() {
         let vm = ViewModel()
-        vm.preferences.localVolumesHidden = ["B"]
+        vm.preferences.localVolumesHidden = ["/Volumes/B"]
         vm.reconcileLocalVolumes(with: [vol("A", "/Volumes/A")])
         vm.reconcileLocalVolumes(with: [vol("B", "/Volumes/B")])
         #expect(vm.localVolumes.map { $0.volume.name } == ["A", "B"])
@@ -137,5 +213,63 @@ struct ReconcileTests {
         #expect(ViewModel.rediscoveryPollCount(pollIntervalSeconds: 10) == 6)
         #expect(ViewModel.rediscoveryPollCount(pollIntervalSeconds: 120) == 1)
         #expect(ViewModel.rediscoveryPollCount(pollIntervalSeconds: 0) == 1)
+    }
+}
+
+struct KnownShareTests {
+    static func vol(_ m: String) -> NetworkVolume {
+        NetworkVolume(username: "", remoteHost: "h", remotePath: "/p", localMount: m, type: "nfs")
+    }
+    static func ok(_ path: String, _ ts: TimeInterval) -> SizeInfo? {
+        SizeInfo(importantCapacity: 1, opportunisticCapacity: 1, totalCapacity: 2, timestamp: ts)
+    }
+
+    @Test func mountPointMismatchYieldsNoSample() {
+        #expect(Manager.mountMatches(mountOn: "/System/Volumes/Data/mnt/a", expectedMount: "/mnt/a"))
+        #expect(!Manager.mountMatches(mountOn: "/System/Volumes/Data", expectedMount: "/mnt/a"))
+        var fs = statfs()
+        withUnsafeMutableBytes(of: &fs.f_mntonname) { buf in
+            for (i, b) in "/System/Volumes/Data".utf8.enumerated() { buf[i] = b }
+        }
+        fs.f_bsize = 4096; fs.f_blocks = 100; fs.f_bavail = 50; fs.f_bfree = 50
+        #expect(Manager.sample(from: fs, expectedMount: "/mnt/a", timestamp: 1) == nil)
+    }
+
+    @Test func savedKnownSharesAreProbedAfterReload() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let a = Manager()
+        await a.setRecordDirectory(dir)
+        await a.setProbeOverride(Self.ok)
+        await a.setOverrides(mountListing: { [Self.vol("/mnt/a")] }, networkSize: nil)
+        _ = try await a.recordNetworkVolumeSizes()
+
+        let b = Manager()
+        await b.setRecordDirectory(dir)
+        await b.setProbeOverride(Self.ok)
+        await b.setOverrides(mountListing: { [] }, networkSize: nil)
+        _ = await b.loadStoredNetworkVolumeRecords()
+        let (vols, records) = try await b.recordNetworkVolumeSizes()
+        #expect(vols.map(\.localMount) == ["/mnt/a"])
+        #expect(records["/mnt/a"]?.isEmpty == false)
+    }
+
+    @Test func knownSharesExpireAfter24h() async throws {
+        let m = Manager()
+        let t0 = Date()
+        await m.setClock { t0 }
+        await m.setProbeOverride({ _, _ in nil })
+        await m.setOverrides(mountListing: { [Self.vol("/mnt/a")] }, networkSize: nil)
+        _ = try await m.recordNetworkVolumeSizes()
+        #expect(await m.knownShareMounts == ["/mnt/a"])
+        await m.setOverrides(mountListing: { [] }, networkSize: nil)
+        await m.setClock { t0.addingTimeInterval(23 * 3600) }
+        _ = try await m.recordNetworkVolumeSizes()
+        #expect(await m.knownShareMounts == ["/mnt/a"])
+        await m.setClock { t0.addingTimeInterval(25 * 3600) }
+        let (vols, _) = try await m.recordNetworkVolumeSizes()
+        #expect(vols.isEmpty)
+        #expect(await m.knownShareMounts.isEmpty)
     }
 }

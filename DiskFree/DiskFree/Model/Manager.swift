@@ -51,12 +51,24 @@ public actor Manager: Sendable {
 
     private let inFlightProbes = InFlightProbes() // network mounts with a statfs outstanding
     
-    private var localVolumeSizes: LocalVolumeRecords = [:] // keyed by volume.name
+    private var localVolumeSizes: LocalVolumeRecords = [:] // keyed by volume.key
     private var networkVolumeSizes: NetworkVolumeRecords = [:] // keyed by volume.localMount
 
     // every network volume seen this run, keyed by localMount. Automounted
     // shares vanish from `mount` when idle but still work (and remount on access)
-    private var knownNetworkVolumes: [String: NetworkVolume] = [:]
+    // (persisted, and forgotten after `knownShareExpiry` without a sample)
+    private var knownNetworkVolumes: [String: KnownNetworkVolume] = [:]
+
+    static let knownShareExpiry: TimeInterval = 24 * 3600
+
+    // test seams: the clock, and where network records are kept
+    var clock: @Sendable () -> Date = { Date() }
+    var recordDirectory: URL?
+
+    func setClock(_ clock: @escaping @Sendable () -> Date) { self.clock = clock }
+    func setRecordDirectory(_ url: URL?) { recordDirectory = url }
+
+    var knownShareMounts: [String] { knownNetworkVolumes.keys.sorted() }
 
     var dfTimeoutSeconds: TimeInterval = 10
 
@@ -79,10 +91,41 @@ public actor Manager: Sendable {
         networkSizeOverride = networkSize
     }
 
+    /// Records stored under a volume name move to the key of the one mounted
+    /// volume with that name; names that match none or several are dropped.
+    /// Entries that already look like keys (UUID or path) are kept, so an
+    /// unplugged drive keeps its history.
+    static func migrateNameKeys<T>(_ stored: [String: T],
+                                   volumes: [LocalVolume],
+                                   merge: (T, T) -> T) -> [String: T]
+    {
+        let keys = Set(volumes.map(\.key))
+        var out: [String: T] = [:]
+        func add(_ key: String, _ value: T) {
+            if let old = out[key] { out[key] = merge(old, value) } else { out[key] = value }
+        }
+        for (key, value) in stored {
+            if keys.contains(key) || LocalVolume.looksLikeKey(key) {
+                add(key, value)
+            } else {
+                let matches = volumes.filter { $0.name == key }
+                if matches.count == 1 { add(matches[0].key, value) }
+            }
+        }
+        return out
+    }
+
     public func loadStoredLocalVolumeRecords() async {
+        await loadStoredLocalVolumeRecords(volumes: volumes)
+    }
+
+    func loadStoredLocalVolumeRecords(volumes: [LocalVolume]) async {
         do {
             if let recordKeeper = LocalVolumeRecordKeeper() {
-                let initialSizes = try await recordKeeper.loadRecords()
+                let stored = try await recordKeeper.loadRecords()
+                let initialSizes = Self.migrateNameKeys(stored, volumes: volumes) { a, b in
+                    (a + b).sorted { $0.timestamp < $1.timestamp }
+                }
 
                 localVolumeSizes = initialSizes
                 print("loaded stored records \(initialSizes.count)")
@@ -94,7 +137,15 @@ public actor Manager: Sendable {
     
     public func loadStoredNetworkVolumeRecords() async -> NetworkVolumeRecords? {
         do {
-            if let recordKeeper = NetworkVolumeRecordKeeper() {
+            if let recordKeeper = NetworkVolumeRecordKeeper(directory: recordDirectory) {
+                // seed known shares so idle automounted ones are probed (and remounted)
+                do {
+                    for k in try await recordKeeper.loadKnown() {
+                        knownNetworkVolumes[k.volume.localMount] = k
+                    }
+                } catch {
+                    print("error loading known network volumes: \(error)")
+                }
                 let initialSizes = try await recordKeeper.loadRecords()
 
                 networkVolumeSizes = initialSizes
@@ -158,7 +209,8 @@ public actor Manager: Sendable {
         let rootSymlinks = try await readRootSymlinks()
 
         let keys: [URLResourceKey] = [
-            .volumeNameKey,             // non-localized; keys the persisted records
+            .volumeNameKey,             // displayed and spoken
+            .volumeUUIDStringKey,       // keys the persisted records
             .volumeIsLocalKey,
             .volumeIsRootFileSystemKey, // identifies which volume is '/'
             .volumeIsInternalKey,
@@ -196,7 +248,8 @@ public actor Manager: Sendable {
                                        mountPoint: mountPoint,
                                        userVisibleMountPoint: userVisibleMountPoint,
                                        isInternal: values.volumeIsInternal ?? false,
-                                       isEjectable: values.volumeIsEjectable ?? false))
+                                       isEjectable: values.volumeIsEjectable ?? false,
+                                       uuid: values.volumeUUIDString))
             } catch {
                 print("error \(error)")
             }
@@ -214,9 +267,17 @@ public actor Manager: Sendable {
         } else {
             mounted = try await readNetworkVolumes()
         }
-        for v in mounted { knownNetworkVolumes[v.localMount] = v }
-        let networkVolumes = knownNetworkVolumes.values.sorted()
-        let timestamp = Date().timeIntervalSince1970
+        let nowDate = clock()
+        // forget shares that have not produced a sample for a day
+        knownNetworkVolumes = knownNetworkVolumes.filter {
+            nowDate.timeIntervalSince1970 - $0.value.lastSample <= Self.knownShareExpiry
+        }
+        for v in mounted {
+            let last = knownNetworkVolumes[v.localMount]?.lastSample ?? nowDate.timeIntervalSince1970
+            knownNetworkVolumes[v.localMount] = KnownNetworkVolume(volume: v, lastSample: last)
+        }
+        let networkVolumes = knownNetworkVolumes.values.map(\.volume).sorted()
+        let timestamp = nowDate.timeIntervalSince1970
 
         await withTaskGroup(of: (NetworkVolume, SizeInfo?)?.self) { group in
             for volume in networkVolumes {
@@ -235,6 +296,7 @@ public actor Manager: Sendable {
             for await result in group {
                 if let (volume, size) = result {
                     if let size {
+                        knownNetworkVolumes[volume.localMount]?.lastSample = timestamp
                         print("got size \(size) for \(volume)")
                         if var existingList = networkVolumeSizes[volume.localMount] {
                             existingList.append(size)
@@ -245,6 +307,11 @@ public actor Manager: Sendable {
                     }
                 }
             }
+        }
+
+        if let keeper = NetworkVolumeRecordKeeper(directory: recordDirectory) {
+            do { try await keeper.save(known: Array(knownNetworkVolumes.values)) }
+            catch { print("error saving known network volumes: \(error)") }
         }
 
         // only keep newer entries 
@@ -272,7 +339,7 @@ public actor Manager: Sendable {
             // one failing volume must not stop the others from being sampled
             do {
                 if let sizeOfVolume = try self.sizeOf(volume: volume, at: timestamp) {
-                    localVolumeSizes[volume.name, default: []].append(sizeOfVolume)
+                    localVolumeSizes[volume.key, default: []].append(sizeOfVolume)
                 }
             } catch {
                 print("error querying size of \(volume.name) at \(volume.mountPoint): \(error)")
@@ -301,6 +368,21 @@ public actor Manager: Sendable {
         try SizeInfo(for: volume.mountPoint, timestamp: timestamp)
     }
     
+    // true when statfs answered for the share itself. If the share is gone but
+    // its mount-point directory remains, statfs describes the containing volume.
+    static func mountMatches(mountOn: String, expectedMount: String) -> Bool {
+        NetworkVolume.normalizedMountPath(mountOn) == NetworkVolume.normalizedMountPath(expectedMount)
+    }
+
+    static func sample(from fs: statfs, expectedMount: String, timestamp: TimeInterval) -> SizeInfo? {
+        var fs = fs
+        let on = withUnsafePointer(to: &fs.f_mntonname) {
+            $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+        }
+        guard mountMatches(mountOn: on, expectedMount: expectedMount) else { return nil }
+        return SizeInfo(statfs: fs, timestamp: timestamp)
+    }
+
     // size of network volume
     func sizeOf(volume: NetworkVolume, at timestamp: TimeInterval) async throws -> SizeInfo? {
         if let networkSizeOverride {
@@ -323,7 +405,9 @@ public actor Manager: Sendable {
                     size = probe(path, timestamp)
                 } else {
                     var fs = statfs()
-                    size = statfs(path, &fs) == 0 ? SizeInfo(statfs: fs, timestamp: timestamp) : nil
+                    size = statfs(path, &fs) == 0
+                        ? Manager.sample(from: fs, expectedMount: path, timestamp: timestamp)
+                        : nil
                 }
                 inFlight.end(path)
                 once.resume(.success(size))
