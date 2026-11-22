@@ -26,4 +26,11 @@ final class ScreenshotRendererTests: XCTestCase {
             XCTAssertEqual(rep.pixelsHigh, 1800, name)
         }
     }
+
+    func testRendersInDarkAppearance() throws {
+        for (name, view) in ScreenshotRenderer.screenshotViews() {
+            let dark = AnyView(view.environment(\.colorScheme, .dark))
+            XCTAssertNotNil(ScreenshotRenderer.pngData(for: dark), name)
+        }
+    }
 }
