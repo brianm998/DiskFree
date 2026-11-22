@@ -111,7 +111,7 @@ struct LocalProbeTests {
 
     @Test func importantUsageLookedUpOncePerMinutePerVolume() async throws {
         let c = Counter()
-        let now = Locked(Date(timeIntervalSince1970: 1_000_000))
+        let now = Locked(Date())
         let m = Manager()
         await m.setClock { now.value }
         await m.setLocalProbe(.fake(mountOn: { $0 }, capacity: { _ in c.hit(); return (900, 950) }))
