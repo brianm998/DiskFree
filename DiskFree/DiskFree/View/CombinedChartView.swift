@@ -37,7 +37,7 @@ struct CombinedChartPlot: View {
 //            let lineWidth = 6
 //            let dotSize = 24//lineWidth*4
             ForEach(self.viewModel.allVolumes) { volumeView in
-                if volumeView.isSelected {
+                if volumeView.isSelected && volumeView.isMounted {
                     let points = volumeView.chartSizes
                     let color = volumeView.lineColor
                     if showFree {

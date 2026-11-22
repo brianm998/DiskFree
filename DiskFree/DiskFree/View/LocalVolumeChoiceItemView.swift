@@ -13,10 +13,16 @@ struct LocalVolumeChoiceItemView: View {
                     Text("\(volumeViewModel.volume.name)")
                 }
             }
+              .opacity(volumeViewModel.isMounted ? 1 : 0.5)
               .toggleStyle(.checkbox)
               .onChange(of: volumeViewModel.isSelected) { _, value in
                   viewModel.update(for: volumeViewModel)
               }
+            if !volumeViewModel.isMounted {
+                Text("not connected")
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+            }
             
         }
     }

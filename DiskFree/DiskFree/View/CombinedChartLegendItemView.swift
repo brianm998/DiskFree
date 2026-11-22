@@ -106,9 +106,9 @@ struct CombinedChartLegendItemView: View {
             self.volumeIcon
 
             // text for where volume is mounted
-            Text(volumeView.volume.mountPath)
+            Text(volumeView.isMounted ? volumeView.volume.mountPath : "\(volumeView.volume.name) (not connected)")
               .font(.system(size: legendFontSize))
-              .foregroundStyle(volumeView.lineColor)
+              .foregroundStyle(volumeView.isMounted ? volumeView.lineColor : Color.secondary)
 
             // text for free space available
             Text(volumeView.chartFreeLineText)
@@ -133,7 +133,8 @@ struct CombinedChartLegendItemView: View {
             self.changeArrow
             self.volumeChange
         }
-          .help(volumeView.helpText) // could be better
+          .opacity(volumeView.isMounted ? 1 : 0.5)
+          .help(volumeView.isMounted ? volumeView.helpText : "\(volumeView.volume.name) is not connected")
 //        Spacer()
 
     }
