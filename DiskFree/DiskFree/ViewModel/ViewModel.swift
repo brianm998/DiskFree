@@ -115,7 +115,7 @@ public final class ViewModel {
     }
 
     /// false in tests: skip writing record and preference files
-    var persistsToDisk = true
+    var persistsToDisk = !TestHost.isActive
     /// test seam: the async preference load in init() would overwrite preferences
     var networkPollIntervalOverride: Int?
 
