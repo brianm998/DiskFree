@@ -28,15 +28,6 @@ struct MainView: View {
                   }
               }
           }
-          .onAppear {
-              if viewModel.isDemo { return }
-              viewModel.listLocalVolumes()
-              viewModel.listNetworkVolumes()
-          }
-          .onDisappear {
-              if viewModel.isDemo { return }
-              viewModel.stopPolling()
-          }
           .padding()
     }
 }

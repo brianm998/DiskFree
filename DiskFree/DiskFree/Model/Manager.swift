@@ -4,15 +4,12 @@ import Foundation
 
  todo:
 
- - implement version number somewhere
  - allow removing items from chart?
  - add loading animation at start
  - missing visual error messages to user
  - show on chart where low space threshold is
    - allow changing it by dragging it
  - create app icon
- - add github link in app
- - support multiple windows better, i.e. separate preferences for each
 
  - look into this:
    diskutil info -plist /

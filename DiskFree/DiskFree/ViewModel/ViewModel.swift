@@ -411,7 +411,18 @@ public final class ViewModel {
     private var localVolumeTask: Task<Void,Never>?
     private var networkVolumeTask: Task<Void,Never>?
 
-    /// Cancel all polling loops (window closed).  A later listLocalVolumes() /
+    /// True while the polling loops are running.
+    var isPolling: Bool { listingTask != nil && networkVolumeTask != nil }
+
+    /// Starts the local and network polling loops.  Idempotent: calling it again
+    /// (or from a second window) never starts a second set of loops.
+    func startPolling() {
+        if isDemo { return }
+        listLocalVolumes()
+        listNetworkVolumes()
+    }
+
+    /// Cancel all polling loops (app shutting down).  A later listLocalVolumes() /
     /// listNetworkVolumes() starts them again.
     func stopPolling() {
         stopObservingMounts()
