@@ -27,6 +27,16 @@ enum VolumeType: Equatable,
         }
     }
 
+    /// stable identity used for records, selection and alert state
+    var key: String {
+        switch self {
+        case .network(let volume):
+            return volume.localMount
+        case .local(let volume):
+            return volume.key
+        }
+    }
+
     static func == (lhs: VolumeType, rhs: NetworkVolume) -> Bool {
         switch lhs {
         case .network(let lhsVolume):

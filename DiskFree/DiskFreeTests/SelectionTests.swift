@@ -19,7 +19,7 @@ struct SelectionTests {
 
     @Test func hiddenDecidesSelection() {
         let vm = ViewModel()
-        vm.preferences.localVolumesHidden = ["B"]
+        vm.preferences.localVolumesHidden = ["/Volumes/B"]
         vm.reconcileLocalVolumes(with: [vol("A"), vol("B"), vol("rp")])
         #expect(vm.localVolumes.map { $0.isSelected } == [true, false, true])
     }
@@ -41,7 +41,7 @@ struct SelectionTests {
         vm.reconcileLocalVolumes(with: [vol("A"), vol("B")])
         vm.clearAll()
         let q = try roundTrip(vm.preferences)
-        #expect(q.localVolumesHidden == ["A", "B"])
+        #expect(q.localVolumesHidden == ["/Volumes/A", "/Volumes/B"])
         vm.selectAll()
         #expect(vm.preferences.localVolumesHidden.isEmpty)
     }
@@ -57,7 +57,7 @@ struct SelectionTests {
         let vm = ViewModel(preferenceLoader: { loaded })
         _ = try await vm.discoverLocalVolumes(listing: { [self] in [vol("A"), vol("B")] })
         #expect(vm.localVolumes.map { $0.isSelected } == [true, false])
-        #expect(vm.preferences.localVolumesHidden == ["B"])
+        #expect(vm.preferences.localVolumesHidden == ["/Volumes/B"])
         #expect(vm.preferences.legacyLocalVolumesToShow == nil)
         let written = try JSONSerialization.jsonObject(with: JSONEncoder().encode(vm.preferences)) as! [String: Any]
         #expect(written["localVolumesHidden"] != nil)
@@ -65,7 +65,7 @@ struct SelectionTests {
 
     @Test func slowLoaderIsAwaitedBeforeDiscovery() async throws {
         var p = Preferences()
-        p.localVolumesHidden = ["B"]
+        p.localVolumesHidden = ["/Volumes/B"]
         let loaded = p
         let vm = ViewModel(preferenceLoader: {
             try? await Task.sleep(nanoseconds: 300_000_000)

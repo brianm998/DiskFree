@@ -296,7 +296,7 @@ public final class ViewModel {
                 for volumeView in networkVolumes {
                     if volumeView.volume == newVolume {
                         // set sizes here
-                        if let sizes = sizeRecords[volumeView.volume.name] {
+                        if let sizes = sizeRecords[volumeView.volume.key] {
                             volumeView.sizes = sizes
                         }
                         isNew = false
@@ -309,7 +309,7 @@ public final class ViewModel {
                                                     color: .purple,
                                                     preferences: preferences)
                     viewModel.isSelected = !preferences.networkVolumesHidden.contains(newVolume.localMount)
-                    if let sizes = sizeRecords[newVolume.name] {
+                    if let sizes = sizeRecords[newVolume.localMount] {
                         viewModel.sizes = sizes
                     }
                     networkVolumes.append(viewModel)
@@ -339,9 +339,10 @@ public final class ViewModel {
 
     func discoverLocalVolumes(listing: (() async throws -> [LocalVolume])? = nil) async throws -> [LocalVolume] {
         await preferencesLoaded?.value
-        await manager.loadStoredLocalVolumeRecords()
         let volumes: [LocalVolume]
         if let listing { volumes = try await listing() } else { volumes = try await manager.listLocalVolumes() }
+        await manager.loadStoredLocalVolumeRecords(volumes: volumes)
+        migrateHiddenNames(discovered: volumes)
         migrateLegacySelection(discovered: volumes)
         var colorIndex = 0
         localVolumes = volumes.map {
@@ -350,7 +351,7 @@ public final class ViewModel {
                                       preferences: preferences)
             colorIndex += 1
             if colorIndex >= lineColors.count { colorIndex = 0 }
-            ret.isSelected = !preferences.localVolumesHidden.contains($0.name)
+            ret.isSelected = !preferences.localVolumesHidden.contains($0.key)
             return ret
         }
         return volumes
@@ -452,7 +453,7 @@ public final class ViewModel {
     func clearAll() {
         for volumeViewModel in localVolumes {
             volumeViewModel.isSelected = false
-            preferences.localVolumesHidden.insert(volumeViewModel.volume.name)
+            preferences.localVolumesHidden.insert(volumeViewModel.volume.key)
         }
         savePreferences()
     }
@@ -460,7 +461,7 @@ public final class ViewModel {
     func selectAll() {
         for volumeViewModel in localVolumes {
             volumeViewModel.isSelected = true
-            preferences.localVolumesHidden.remove(volumeViewModel.volume.name)
+            preferences.localVolumesHidden.remove(volumeViewModel.volume.key)
         }
         savePreferences()
     }
@@ -470,8 +471,21 @@ public final class ViewModel {
     func migrateLegacySelection(discovered volumes: [LocalVolume]) {
         guard let legacy = preferences.legacyLocalVolumesToShow else { return }
         preferences.legacyLocalVolumesToShow = nil
-        preferences.localVolumesHidden = Set(volumes.map { $0.name }).subtracting(legacy)
+        preferences.localVolumesHidden = Set(volumes.filter { !legacy.contains($0.name) }.map { $0.key })
         savePreferences()
+    }
+
+    /// Hidden entries stored by volume name move to the key of the one mounted
+    /// volume with that name; other names are dropped.
+    func migrateHiddenNames(discovered volumes: [LocalVolume]) {
+        let hidden = preferences.localVolumesHidden
+        let migrated = Set(Manager.migrateNameKeys(Dictionary(uniqueKeysWithValues: hidden.map { ($0, ()) }),
+                                                   volumes: volumes,
+                                                   merge: { a, _ in a }).keys)
+        if migrated != hidden {
+            preferences.localVolumesHidden = migrated
+            savePreferences()
+        }
     }
 
     private func potentialSizeAudio(for oldSize: SizeInfo?,
@@ -487,9 +501,9 @@ public final class ViewModel {
 
         // compare and see if we've crossed this threshold
 
-        if lowVolumes.contains(volume.volume.name) { 
+        if lowVolumes.contains(volume.volume.key) { 
             if newSize.gigsFree > warningThreshold {
-                lowVolumes.remove(volume.volume.name)
+                lowVolumes.remove(volume.volume.key)
 
                 let message = goodText
                   .replacingOccurrences(of: "$0", with: volume.volume.name)
@@ -510,13 +524,13 @@ public final class ViewModel {
         {
             say(message, as: voice)
             print("WARNING: \(volume.volume.name) oldSize.gigsFree \(oldSize.gigsFree) newSize.gigsFree \(newSize.gigsFree)")
-            lowVolumes.insert(volume.volume.name)
+            lowVolumes.insert(volume.volume.key)
         } else if newSize.gigsFree < warningThreshold {
             // no old size
             print("WARNING: \(volume.volume.name) newSize.gigsFree \(newSize.gigsFree)")
             
             say(message, as: voice)
-            lowVolumes.insert(volume.volume.name)
+            lowVolumes.insert(volume.volume.key)
         } else {
             // put out some kind of other error if it gets empty or really close to so
         }
@@ -554,7 +568,7 @@ public final class ViewModel {
             self.newNetworkVolumeSizes = records
             
             for volume in self.networkVolumes {
-                if let newSizes = self.newNetworkVolumeSizes[volume.volume.name] {
+                if let newSizes = self.newNetworkVolumeSizes[volume.volume.key] {
                     volume.lastSize = newSizes.last
                     volume.sizes = newSizes
                 }
@@ -583,7 +597,7 @@ public final class ViewModel {
 
                 // XXX extract this into a method and call it above for network volumes too
                 
-                if let newSizes = self.newLocalVolumeSizes[volume.volume.name] {
+                if let newSizes = self.newLocalVolumeSizes[volume.volume.key] {
                     //print("volume.lastSize \(volume.lastSize)")
 
                     let oldSize = volume.lastSize
@@ -751,19 +765,19 @@ public final class ViewModel {
         return max(1, Int((60.0 / Double(pollIntervalSeconds)).rounded(.up)))
     }
 
-    /// Merge freshly discovered volumes into localVolumes, by name.  Existing view
-    /// models are kept (with the new volume value); new volumes are appended;
+    /// Merge freshly discovered volumes into localVolumes, by key.  Existing view
+    /// models are kept (with the new name and mount point); new volumes are appended;
     /// volumes no longer present are left in place.
     func reconcileLocalVolumes(with volumes: [LocalVolume]) {
         for volume in volumes {
-            if let existing = localVolumes.first(where: { $0.volume.name == volume.name }) {
-                // LocalVolume equality is by name only, so always replace
+            if let existing = localVolumes.first(where: { $0.volume.key == volume.key }) {
+                // equality is by key only, so always replace to pick up a new name or mount point
                 existing.volume = .local(volume)
             } else {
                 let vm = VolumeViewModel(volume: volume,
                                          color: lineColors[localVolumes.count % lineColors.count],
                                          preferences: preferences)
-                vm.isSelected = !preferences.localVolumesHidden.contains(volume.name)
+                vm.isSelected = !preferences.localVolumesHidden.contains(volume.key)
                 localVolumes.append(vm)
             }
         }
@@ -781,7 +795,7 @@ public final class ViewModel {
 
     func update(for volumeViewModel: VolumeViewModel? = nil) { 
         if let volumeViewModel {
-            let name = volumeViewModel.volume.name
+            let name = volumeViewModel.volume.key
             let hide = !volumeViewModel.isSelected
             switch volumeViewModel.volume {
             case .network:
