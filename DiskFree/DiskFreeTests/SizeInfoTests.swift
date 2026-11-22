@@ -39,14 +39,26 @@ struct SizeInfoTests {
         let g = SizeInfo.oneGiga
         let s = SizeInfo(importantCapacity: 30 * g, opportunisticCapacity: 30 * g,
                          totalCapacity: 2 * SizeInfo.oneTera, timestamp: 0)
-        #expect(s.freeSize == "30.00G")
-        #expect(s.freeSizeInt == "30G")
-        #expect(s.totalSize == "2.00T")
-        #expect(s.usedSizeInt.hasSuffix("T"))
+        #expect(s.freeSize == "30 GB")
+        #expect(s.freeSizeInt == "30 GB")
+        #expect(s.totalSize == "2 TB")
+        #expect(s.usedSizeInt.hasSuffix("TB"))
         let small = SizeInfo(importantCapacity: 5 * SizeInfo.oneMega, opportunisticCapacity: 0,
                              totalCapacity: 100, timestamp: 0)
-        #expect(small.freeSize == "5.00M")
-        #expect(small.freeSizeInt == "5M")
+        #expect(small.freeSize == "5 MB")
+        #expect(small.freeSizeInt == "5 MB")
+    }
+
+    @Test func finderStyleSizes() {
+        let t = SizeInfo(importantCapacity: 0, opportunisticCapacity: 0,
+                         totalCapacity: 4_000_000_000_000, timestamp: 0)
+        #expect(t.totalSize == "4 TB")
+        let k = SizeInfo(importantCapacity: 512 * 1024, opportunisticCapacity: 0,
+                         totalCapacity: 0, timestamp: 0)
+        #expect(k.freeSize == "524 KB")
+        let g = SizeInfo(importantCapacity: 100_000_000_000, opportunisticCapacity: 0,
+                         totalCapacity: 0, timestamp: 0)
+        #expect(g.gigsFree == 100)
     }
 
     @Test func equality() throws {
