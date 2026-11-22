@@ -40,7 +40,10 @@ struct SettingsView: View {
                 TextField("\(viewModel.preferences.localPollIntervalSeconds)",
                           value: $viewModel.preferences.localPollIntervalSeconds,
                           format: .number)
-                  .frame(maxWidth: 22)
+                  .frame(maxWidth: 50)
+                  .onChange(of: viewModel.preferences.localPollIntervalSeconds) { _, _ in
+                      viewModel.sanitizePreferences()
+                  }
                 Text("Seconds")
             }
 
@@ -50,10 +53,11 @@ struct SettingsView: View {
                           value: $viewModel.preferences.maxDataAgeMinutes,
                           format: .number)
                   .onChange(of: viewModel.preferences.maxDataAgeMinutes) { _, value in
+                      viewModel.sanitizePreferences()
                       viewModel.updateManager()
                   }
 
-                  .frame(maxWidth: 22)
+                  .frame(maxWidth: 50)
                 Text("Minutes of Data")
             }
         }
