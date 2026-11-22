@@ -70,6 +70,8 @@ public final class ViewModel {
     
     var warningLocalVolumes: Set<String> = []
     var errorLocalVolumes: Set<String> = []
+    var warningNetworkVolumes: Set<String> = []
+    var errorNetworkVolumes: Set<String> = []
     var volumeRecordsTimeDurationSeconds: TimeInterval = 0 {
         didSet { updateToolbarDuration() }
     }
@@ -537,8 +539,41 @@ public final class ViewModel {
         }
     }
 
-    private func potentialSizeAudio(for oldSize: SizeInfo?,
-                                    and newSize: SizeInfo,
+    /// Where spoken alerts go; tests replace it.
+    @ObservationIgnored nonisolated(unsafe) var speak: (String, VoiceActor.Voice) -> Void = { message, voice in
+        say(message, as: voice)
+    }
+
+    /// Free space must rise this far above the threshold before a low volume is
+    /// announced as recovered, so a disk hovering at the threshold stays quiet.
+    static func recoveryMargin(for threshold: UInt) -> UInt {
+        max(2, (threshold + 19) / 20)
+    }
+
+    /// The one alert path for local and network volumes.
+    func checkSpaceAlerts(for volume: VolumeViewModel, oldSize: SizeInfo?, newSize: SizeInfo?) {
+        guard volume.isSelected, volume.isMounted, oldSize != nil, let newSize else { return }
+        let isNetwork: Bool
+        if case .network = volume.volume { isNetwork = true } else { isNetwork = false }
+        if preferences.soundVoiceOnErrors {
+            potentialSizeAudio(newSize: newSize, of: volume,
+                               warningThreshold: preferences.lowSpaceErrorThresholdGigs,
+                               badText: "Low Disk Space Error.  $0 is running EXTREMELY low on free space.  It now has only $1 gigabytes of free space left.",
+                               goodText: "$0 is no longer extremely low on free space.  It now has $1 gigabytes of free space left.",
+                               lowVolumes: isNetwork ? &errorNetworkVolumes : &errorLocalVolumes,
+                               with: preferences.errorVoice)
+        }
+        if preferences.soundVoiceOnWarnings {
+            potentialSizeAudio(newSize: newSize, of: volume,
+                               warningThreshold: preferences.lowSpaceWarningThresholdGigs,
+                               badText: "Low Disk Space Warning.  $0 is running low on free space.  It now has only $1 gigabytes of free space left.",
+                               goodText: "$0 is no longer low on free space.  It now has $1 gigabytes of free space left.",
+                               lowVolumes: isNetwork ? &warningNetworkVolumes : &warningLocalVolumes,
+                               with: preferences.warningVoice)
+        }
+    }
+
+    private func potentialSizeAudio(newSize: SizeInfo,
                                     of volume: VolumeViewModel,
                                     warningThreshold: UInt,
                                     badText: String,
@@ -546,45 +581,23 @@ public final class ViewModel {
                                     lowVolumes: inout Set<String>,
                                     with voice: VoiceActor.Voice)
     {
-        if !volume.isSelected { return }
-
-        // compare and see if we've crossed this threshold
-
-        if lowVolumes.contains(volume.volume.key) { 
-            if newSize.gigsFree > warningThreshold {
-                lowVolumes.remove(volume.volume.key)
-
-                let message = goodText
-                  .replacingOccurrences(of: "$0", with: volume.volume.name)
-                  .replacingOccurrences(of: "$1", with: "\(newSize.gigsFree)")
-
-                say(message, as: voice)
-            }
-            return
+        let key = volume.volume.key
+        let fill = { (text: String) in
+            text.replacingOccurrences(of: "$0", with: volume.volume.name)
+                .replacingOccurrences(of: "$1", with: "\(newSize.gigsFree)")
         }
-
-        let message = badText
-          .replacingOccurrences(of: "$0", with: volume.volume.name)
-          .replacingOccurrences(of: "$1", with: "\(newSize.gigsFree)")
-
-        if let oldSize,
-           oldSize.gigsFree >= warningThreshold,
-           newSize.gigsFree < warningThreshold
-        {
-            say(message, as: voice)
-            print("WARNING: \(volume.volume.name) oldSize.gigsFree \(oldSize.gigsFree) newSize.gigsFree \(newSize.gigsFree)")
-            lowVolumes.insert(volume.volume.key)
+        if lowVolumes.contains(key) {
+            if newSize.gigsFree > warningThreshold + Self.recoveryMargin(for: warningThreshold) {
+                lowVolumes.remove(key)
+                speak(fill(goodText), voice)
+            }
         } else if newSize.gigsFree < warningThreshold {
-            // no old size
             print("WARNING: \(volume.volume.name) newSize.gigsFree \(newSize.gigsFree)")
-            
-            say(message, as: voice)
-            lowVolumes.insert(volume.volume.key)
-        } else {
-            // put out some kind of other error if it gets empty or really close to so
+            lowVolumes.insert(key)
+            speak(fill(badText), voice)
         }
     }
-    
+
     private let lineColors: [Color] =
       [
         .blue,
@@ -618,16 +631,16 @@ public final class ViewModel {
             
             for volume in self.networkVolumes {
                 if let newSizes = self.newNetworkVolumeSizes[volume.volume.key] {
+                    let oldSize = volume.lastSize
                     volume.lastSize = newSizes.last
                     volume.sizes = newSizes
+                    checkSpaceAlerts(for: volume, oldSize: oldSize, newSize: newSizes.last)
                 }
             }
 
             // apply colors here
             applyColors()
         }
-
-        // XXX still don't have alerts for network drives
     }
 
     func localRecordViewUpdate(records: LocalVolumeRecords,
@@ -644,8 +657,6 @@ public final class ViewModel {
             
             for volume in self.localVolumes {
 
-                // XXX extract this into a method and call it above for network volumes too
-                
                 if let newSizes = self.newLocalVolumeSizes[volume.volume.key] {
                     //print("volume.lastSize \(volume.lastSize)")
 
@@ -655,34 +666,8 @@ public final class ViewModel {
                     volume.lastSize = newSize
                     volume.sizes = newSizes
 
-                    if volume.isMounted,
-                       let oldSize,
-                       let newSize
-                    {
-                        if preferences.soundVoiceOnErrors { 
-                            potentialSizeAudio(for: oldSize,
-                                               and: newSize,
-                                               of: volume,
-                                               warningThreshold: preferences.lowSpaceErrorThresholdGigs,
-                                               badText: "Low Disk Space Error.  $0 is running EXTREMELY low on free space.  It now has only $1 gigabytes of free space left.",
+                    checkSpaceAlerts(for: volume, oldSize: oldSize, newSize: newSize)
 
-                                               goodText: "$0 is no longer extremely low on free space.  It now has $1 gigabytes of free space left.",
-                                               lowVolumes: &errorLocalVolumes,
-                                               with: preferences.errorVoice)
-                        }
-                        if preferences.soundVoiceOnWarnings { 
-                            potentialSizeAudio(for: oldSize,
-                                               and: newSize,
-                                               of: volume,
-                                               warningThreshold: preferences.lowSpaceWarningThresholdGigs,
-                                               badText: "Low Disk Space Warning.  $0 is running low on free space.  It now has only $1 gigabytes of free space left.",
-
-                                               goodText: "$0 is no longer low on free space.  It now has $1 gigabytes of free space left.",
-                                               lowVolumes: &warningLocalVolumes,
-                                               with: preferences.warningVoice)
-                        }
-                    }
-                    
                     //print("updating volume \(volume.volume.name) size to \(newSizes.count)")
                 }
             }
