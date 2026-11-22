@@ -71,6 +71,18 @@ public actor Manager: Sendable {
     var knownShareMounts: [String] { knownNetworkVolumes.keys.sorted() }
 
     var dfTimeoutSeconds: TimeInterval = 10
+    var localTimeoutSeconds: TimeInterval = 5
+
+    private let localInFlight = InFlightProbes() // local volumes with a probe outstanding
+    private let capacityCache = CapacityCache()
+    private var relistRequested = false
+    // test seam: replaces the system calls of a local probe (run on a background thread)
+    var localProbe = LocalProbeSeam.live
+
+    func setLocalProbe(_ probe: LocalProbeSeam, timeout: TimeInterval? = nil) {
+        localProbe = probe
+        if let timeout { localTimeoutSeconds = timeout }
+    }
 
     // test seam: replaces the output of `mount`
     var mountListingOverride: (@Sendable () async throws -> [NetworkVolume])?
@@ -331,19 +343,30 @@ public actor Manager: Sendable {
     }
     
     func recordLocalVolumeSizes() async throws -> LocalVolumeRecords {
-        //print("record volume sizes volumes.count \(volumes.count)")
         // use the same timestamp for all of them,
         // instead of having them be very slightly different
-        let timestamp = Date().timeIntervalSince1970
-        for volume in volumes {
-            // one failing volume must not stop the others from being sampled
-            do {
-                if let sizeOfVolume = try self.sizeOf(volume: volume, at: timestamp) {
-                    localVolumeSizes[volume.key, default: []].append(sizeOfVolume)
+        let now = clock()
+        let timestamp = now.timeIntervalSince1970
+
+        // all volumes are probed in parallel, off this actor; a stalled one
+        // times out and simply gets no sample this poll
+        let results: [(LocalVolume, SizeInfo?)] = await withTaskGroup(of: (LocalVolume, SizeInfo?).self) { group in
+            for volume in volumes {
+                group.addTask {
+                    do {
+                        return (volume, try await self.sizeOf(volume: volume, at: timestamp))
+                    } catch {
+                        print("error querying size of \(volume.name) at \(volume.mountPoint): \(error)")
+                        return (volume, nil)
+                    }
                 }
-            } catch {
-                print("error querying size of \(volume.name) at \(volume.mountPoint): \(error)")
             }
+            var out: [(LocalVolume, SizeInfo?)] = []
+            for await r in group { out.append(r) }
+            return out
+        }
+        for (volume, size) in results {
+            if let size { localVolumeSizes[volume.key, default: []].append(size) }
         }
 
         // only keep newer entries 
@@ -364,8 +387,60 @@ public actor Manager: Sendable {
 
 
     // size of local volume
-    func sizeOf(volume: LocalVolume, at timestamp: TimeInterval) throws -> SizeInfo? {
-        try SizeInfo(for: volume.mountPoint, timestamp: timestamp)
+    func sizeOf(volume: LocalVolume, at timestamp: TimeInterval) async throws -> SizeInfo? {
+        // one outstanding probe per volume: a stalled disk keeps its thread
+        // blocked in the kernel, don't pile more on top of it
+        let key = volume.key
+        guard localInFlight.begin(key) else {
+            throw "previous probe of \(volume.mountPoint) still blocked"
+        }
+        let inFlight = localInFlight
+        let seam = localProbe
+        let cache = capacityCache
+        let timeout = localTimeoutSeconds
+        let outcome: LocalProbeOutcome = try await withCheckedThrowingContinuation { continuation in
+            let once = ResumeOnce<LocalProbeOutcome>(continuation)
+            DispatchQueue.global().async {
+                let outcome = Manager.probe(volume, timestamp: timestamp, seam: seam, cache: cache)
+                inFlight.end(key)
+                once.resume(.success(outcome))
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                once.resume(.failure("timed out reading \(volume.mountPoint)"))
+            }
+        }
+        switch outcome {
+        case .sample(let size): return size
+        case .failed: return nil
+        case .wrongVolume:
+            print("\(volume.mountPoint) is not the expected volume; requesting a re-list")
+            relistRequested = true
+            return nil
+        }
+    }
+
+    /// true once if a probe found something other than the expected volume
+    func takeRelistRequest() -> Bool {
+        defer { relistRequested = false }
+        return relistRequested
+    }
+
+    /// Runs on a background thread.
+    static func probe(_ volume: LocalVolume, timestamp: TimeInterval,
+                      seam: LocalProbeSeam, cache: CapacityCache) -> LocalProbeOutcome
+    {
+        let path = volume.mountPoint
+        guard let fs = seam.statfs(path, timestamp) else { return .failed }
+        guard mountMatches(mountOn: fs.mountOn, expectedMount: path) else { return .wrongVolume }
+        if let expected = volume.uuid, !expected.isEmpty {
+            // unknown (nil) is not a mismatch; a different UUID is
+            if let actual = seam.uuid(path), actual.caseInsensitiveCompare(expected) != .orderedSame {
+                return .wrongVolume
+            }
+        }
+        return .sample(cache.apply(key: volume.key, base: fs.size, now: timestamp) {
+            seam.capacity(path)
+        })
     }
     
     // true when statfs answered for the share itself. If the share is gone but
@@ -398,7 +473,7 @@ public actor Manager: Sendable {
         let probe = networkProbeOverride
         let timeout = dfTimeoutSeconds
         return try await withCheckedThrowingContinuation { continuation in
-            let once = ResumeOnce(continuation)
+            let once = ResumeOnce<SizeInfo?>(continuation)
             DispatchQueue.global().async {
                 let size: SizeInfo?
                 if let probe {
@@ -432,11 +507,11 @@ final class InFlightProbes: @unchecked Sendable {
     }
 }
 
-final class ResumeOnce: @unchecked Sendable {
+final class ResumeOnce<T: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
-    private var continuation: CheckedContinuation<SizeInfo?, any Error>?
-    init(_ c: CheckedContinuation<SizeInfo?, any Error>) { continuation = c }
-    func resume(_ result: Result<SizeInfo?, any Error>) {
+    private var continuation: CheckedContinuation<T, any Error>?
+    init(_ c: CheckedContinuation<T, any Error>) { continuation = c }
+    func resume(_ result: Result<T, any Error>) {
         lock.lock()
         let c = continuation
         continuation = nil
@@ -447,3 +522,84 @@ final class ResumeOnce: @unchecked Sendable {
 
 
 extension String: @retroactive Error { }
+
+
+/// What a local probe found.
+enum LocalProbeOutcome: Sendable {
+    case sample(SizeInfo)
+    case failed
+    case wrongVolume // statfs/UUID describe some other volume
+}
+
+struct LocalStatfs: Sendable {
+    let mountOn: String
+    let size: SizeInfo
+}
+
+/// The system calls behind a local probe, replaceable in tests.
+struct LocalProbeSeam: Sendable {
+    /// cheap: statfs of the path
+    var statfs: @Sendable (_ path: String, _ timestamp: TimeInterval) -> LocalStatfs?
+    /// expensive: (important, opportunistic) available capacity
+    var capacity: @Sendable (_ path: String) -> (important: Int, opportunistic: Int)?
+    /// the volume UUID string at the path
+    var uuid: @Sendable (_ path: String) -> String?
+
+    static let live = LocalProbeSeam(
+        statfs: { path, ts in
+            liveStatfs(path, timestamp: ts)
+        },
+        capacity: { path in
+            let keys: Set<URLResourceKey> = [.volumeAvailableCapacityForImportantUsageKey,
+                                             .volumeAvailableCapacityForOpportunisticUsageKey]
+            guard let v = try? URL(fileURLWithPath: path).resourceValues(forKeys: keys),
+                  let i = v.volumeAvailableCapacityForImportantUsage,
+                  let o = v.volumeAvailableCapacityForOpportunisticUsage
+            else { return nil }
+            return (Int(i), Int(o))
+        },
+        uuid: { path in
+            try? URL(fileURLWithPath: path).resourceValues(forKeys: [.volumeUUIDStringKey]).volumeUUIDString
+        })
+}
+
+/// Remembers, per volume, when the expensive important/opportunistic figures were
+/// last read and how far they were from statfs's number, so polls in between can
+/// apply that purgeable offset to the cheap statfs value.
+final class CapacityCache: @unchecked Sendable {
+    static let refreshInterval: TimeInterval = 60
+    private struct Entry { var at: TimeInterval; var importantOffset: Int; var opportunisticExtra: Int }
+    private let lock = NSLock()
+    private var entries: [String: Entry] = [:]
+
+    func apply(key: String, base: SizeInfo, now: TimeInterval,
+               lookup: () -> (important: Int, opportunistic: Int)?) -> SizeInfo
+    {
+        lock.lock()
+        let entry = entries[key]
+        lock.unlock()
+        var e = entry
+        if entry == nil || now - entry!.at >= Self.refreshInterval || now < entry!.at {
+            if let c = lookup() {
+                e = Entry(at: now,
+                          importantOffset: c.important - base.importantCapacity,
+                          opportunisticExtra: c.opportunistic - c.important)
+                lock.lock(); entries[key] = e; lock.unlock()
+            }
+        }
+        guard let e else { return base }
+        let important = min(max(base.importantCapacity + e.importantOffset, 0), base.totalCapacity)
+        let opportunistic = min(max(important + e.opportunisticExtra, 0), base.totalCapacity)
+        return SizeInfo(importantCapacity: important, opportunisticCapacity: opportunistic,
+                        totalCapacity: base.totalCapacity, timestamp: base.timestamp)
+    }
+}
+
+private func liveStatfs(_ path: String, timestamp: TimeInterval) -> LocalStatfs? {
+    var fs = statfs()
+    guard statfs(path, &fs) == 0, let size = SizeInfo(statfs: fs, timestamp: timestamp) else { return nil }
+    let on = withUnsafePointer(to: &fs.f_mntonname) {
+        $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+    }
+    return LocalStatfs(mountOn: on, size: size)
+}
