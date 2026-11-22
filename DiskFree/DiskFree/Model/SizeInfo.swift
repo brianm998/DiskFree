@@ -99,34 +99,19 @@ public struct SizeInfo: Sendable,
     var usedSizeInt: String  { userReadableInts(totalCapacity-opportunisticCapacity) }
     var freeSizeInt: String  { userReadableInts(importantCapacity) }
 
-    static let oneKilo:Int = 1024                  // 1 kilo is 1024 bytes
-    static let oneMega:Int = SizeInfo.oneKilo*1024 // 1 mega is 1024 kilos
-    static let oneGiga:Int = SizeInfo.oneMega*1024 // 1 giga is 1024 megs
-    static let oneTera:Int = SizeInfo.oneGiga*1024 // 1 tera is 1024 gigs
+    // decimal units, the way Finder counts them
+    static let oneKilo:Int = 1000
+    static let oneMega:Int = SizeInfo.oneKilo*1000
+    static let oneGiga:Int = SizeInfo.oneMega*1000
+    static let oneTera:Int = SizeInfo.oneGiga*1000
 
+    // formats like Finder ("4 TB", "524 KB")
     private func userReadable(_ sizeInBytes: Int) -> String {
-        if sizeInBytes < SizeInfo.oneMega {
-            return String(format: "%.2fK", Double(sizeInBytes))
-        } else if sizeInBytes < SizeInfo.oneGiga {
-            return String(format: "%.2fM", Double(sizeInBytes)/Double(SizeInfo.oneMega))
-        } else if sizeInBytes < SizeInfo.oneTera {
-            return String(format: "%.2fG", Double(sizeInBytes)/Double(SizeInfo.oneGiga))
-        } else {
-            return String(format: "%.2fT", Double(sizeInBytes)/Double(SizeInfo.oneTera))
-        }
+        ByteCountFormatter.string(fromByteCount: Int64(sizeInBytes), countStyle: .file)
     }
 
     private func userReadableInts(_ sizeInBytes: Int) -> String {
-        if sizeInBytes < SizeInfo.oneMega {
-            return String(format: "%dK", sizeInBytes)
-        } else if sizeInBytes < SizeInfo.oneGiga {
-            return String(format: "%dM", sizeInBytes/SizeInfo.oneMega)
-        } else if sizeInBytes < SizeInfo.oneTera {
-            return String(format: "%dG", sizeInBytes/SizeInfo.oneGiga)
-        } else {
-            return String(format: "%.2fT", Double(sizeInBytes)/Double(SizeInfo.oneTera))
-        }
+        userReadable(sizeInBytes)
     }
-    
 }
 
