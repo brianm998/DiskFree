@@ -81,25 +81,30 @@ public final class ViewModel {
 
     func applyDemoColors() { applyColors() }
 
-    init() {
+    /// Loads the stored preferences (nil when there are none). Replaceable in tests.
+    typealias PreferenceLoader = @Sendable () async -> Preferences?
+
+    /// Completes once the stored preferences have been applied.  Discovery and the
+    /// first network reconcile await it so the saved choices are in place first.
+    private(set) var preferencesLoaded: Task<Void, Never>?
+
+    init(preferenceLoader: PreferenceLoader? = nil) {
         self.isDemo = false
         Speaker.warmVoiceCache()
         observeTermination()
-        Task.detached {
-            // try to load load preferences from file
-            try? await self.preferenceManager?.loadPreferences()
-            if let preferenceManager = self.preferenceManager,
-               let preferences = await preferenceManager.getPreferences()
-            {
-                let clean = preferences.sanitized()
-                await MainActor.run {
-                    self.preferences = clean
-                }
-              await self.manager.set(maxDataAgeMinutes: clean.maxDataAgeMinutes)
-            }
+        let loader: PreferenceLoader = preferenceLoader ?? { [preferenceManager] in
+            try? await preferenceManager?.loadPreferences()
+            return await preferenceManager?.getPreferences()
+        }
+        preferencesLoaded = Task { [weak self] in
+            guard let loaded = await loader() else { return }
+            let clean = loaded.sanitized()
+            guard let self else { return }
+            self.preferences = clean
+            await self.manager.set(maxDataAgeMinutes: clean.maxDataAgeMinutes)
         }
     }
-    
+
     let manager = Manager()
 
     /// replaceable in tests (point them at a temporary directory)
@@ -252,6 +257,7 @@ public final class ViewModel {
 
     /// One network poll.  Returns the poll interval, or nil if cancelled.
     private func networkPollOnce() async -> Int? {
+        await preferencesLoaded?.value
         do {
             let (newNetworkVolumes, sizeRecords) =
               try await manager.recordNetworkVolumeSizes()
@@ -280,6 +286,7 @@ public final class ViewModel {
                     let viewModel = VolumeViewModel(volume: newVolume,
                                                     color: .purple,
                                                     preferences: preferences)
+                    viewModel.isSelected = !preferences.networkVolumesHidden.contains(newVolume.localMount)
                     if let sizes = sizeRecords[newVolume.name] {
                         viewModel.sizes = sizes
                     }
@@ -308,12 +315,12 @@ public final class ViewModel {
         }
     }
 
-    private func discoverLocalVolumes() async throws -> [LocalVolume] {
+    func discoverLocalVolumes(listing: (() async throws -> [LocalVolume])? = nil) async throws -> [LocalVolume] {
+        await preferencesLoaded?.value
         await manager.loadStoredLocalVolumeRecords()
-        let volumes = try await manager.listLocalVolumes()
-        if preferences.localVolumesToShow.count == 0 {
-            preferences.localVolumesToShow = Set(volumes.map { $0.name })
-        }
+        let volumes: [LocalVolume]
+        if let listing { volumes = try await listing() } else { volumes = try await manager.listLocalVolumes() }
+        migrateLegacySelection(discovered: volumes)
         var colorIndex = 0
         localVolumes = volumes.map {
             let ret = VolumeViewModel(volume: $0,
@@ -321,7 +328,7 @@ public final class ViewModel {
                                       preferences: preferences)
             colorIndex += 1
             if colorIndex >= lineColors.count { colorIndex = 0 }
-            ret.isSelected = preferences.localVolumesToShow.contains($0.name)
+            ret.isSelected = !preferences.localVolumesHidden.contains($0.name)
             return ret
         }
         return volumes
@@ -423,13 +430,26 @@ public final class ViewModel {
     func clearAll() {
         for volumeViewModel in localVolumes {
             volumeViewModel.isSelected = false
+            preferences.localVolumesHidden.insert(volumeViewModel.volume.name)
         }
+        savePreferences()
     }
 
     func selectAll() {
         for volumeViewModel in localVolumes {
             volumeViewModel.isSelected = true
+            preferences.localVolumesHidden.remove(volumeViewModel.volume.name)
         }
+        savePreferences()
+    }
+
+    /// An older preferences file only had the set of volumes to show.  Use it once:
+    /// hide the discovered volumes that are not in it.
+    func migrateLegacySelection(discovered volumes: [LocalVolume]) {
+        guard let legacy = preferences.legacyLocalVolumesToShow else { return }
+        preferences.legacyLocalVolumesToShow = nil
+        preferences.localVolumesHidden = Set(volumes.map { $0.name }).subtracting(legacy)
+        savePreferences()
     }
 
     private func potentialSizeAudio(for oldSize: SizeInfo?,
@@ -722,7 +742,7 @@ public final class ViewModel {
                 let vm = VolumeViewModel(volume: volume,
                                          color: lineColors[localVolumes.count % lineColors.count],
                                          preferences: preferences)
-                vm.isSelected = preferences.localVolumesToShow.contains(volume.name)
+                vm.isSelected = !preferences.localVolumesHidden.contains(volume.name)
                 localVolumes.append(vm)
             }
         }
@@ -740,10 +760,15 @@ public final class ViewModel {
 
     func update(for volumeViewModel: VolumeViewModel? = nil) { 
         if let volumeViewModel {
-            if volumeViewModel.isSelected {
-                self.preferences.localVolumesToShow.insert(volumeViewModel.volume.name)
-            } else {
-                self.preferences.localVolumesToShow.remove(volumeViewModel.volume.name)
+            let name = volumeViewModel.volume.name
+            let hide = !volumeViewModel.isSelected
+            switch volumeViewModel.volume {
+            case .network:
+                if hide { preferences.networkVolumesHidden.insert(name) }
+                else { preferences.networkVolumesHidden.remove(name) }
+            case .local:
+                if hide { preferences.localVolumesHidden.insert(name) }
+                else { preferences.localVolumesHidden.remove(name) }
             }
         }
         savePreferences()

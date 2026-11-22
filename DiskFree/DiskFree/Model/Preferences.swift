@@ -5,6 +5,13 @@ public struct Preferences: Codable, Sendable {
     var localVolumesToShow: Set<String>
     var localPollIntervalSeconds: Int
     var networkVolumesToShow: Set<String>
+    /// Volumes the owner hid, keyed by local volume name. Volumes not listed are shown.
+    var localVolumesHidden: Set<String>
+    /// Network volumes the owner hid, keyed by localMount.
+    var networkVolumesHidden: Set<String>
+    /// Set only when a stored file has `localVolumesToShow` but no `localVolumesHidden`
+    /// (written by an older version). Consumed by the first discovery; never encoded.
+    var legacyLocalVolumesToShow: Set<String>?
     var networkPollIntervalSeconds: Int
     var showSettingsView: Bool
     var chartType: ChartType
@@ -24,6 +31,8 @@ public struct Preferences: Codable, Sendable {
         localVolumesToShow = []
         localPollIntervalSeconds = 4
         networkVolumesToShow = []
+        localVolumesHidden = []
+        networkVolumesHidden = []
         networkPollIntervalSeconds = 30
         showSettingsView = false
         chartType = .combined
@@ -53,11 +62,25 @@ public struct Preferences: Codable, Sendable {
         return p
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case localVolumesToShow, localPollIntervalSeconds, networkVolumesToShow,
+             localVolumesHidden, networkVolumesHidden,
+             networkPollIntervalSeconds, showSettingsView, chartType, showFreeSpace,
+             showUsedSpace, soundVoiceOnWarnings, soundVoiceOnErrors, warningVoice,
+             errorVoice, legendFontSize, lowSpaceWarningThresholdGigs,
+             lowSpaceErrorThresholdGigs, maxDataAgeMinutes
+    }
+
     /// Tolerant decoding: any missing key takes its default from init().
     public init(from decoder: Decoder) throws {
         self.init()
         let c = try decoder.container(keyedBy: CodingKeys.self)
         localVolumesToShow = try c.decodeIfPresent(Set<String>.self, forKey: .localVolumesToShow) ?? localVolumesToShow
+        localVolumesHidden = try c.decodeIfPresent(Set<String>.self, forKey: .localVolumesHidden) ?? localVolumesHidden
+        networkVolumesHidden = try c.decodeIfPresent(Set<String>.self, forKey: .networkVolumesHidden) ?? networkVolumesHidden
+        if !c.contains(.localVolumesHidden), c.contains(.localVolumesToShow) {
+            legacyLocalVolumesToShow = localVolumesToShow
+        }
         localPollIntervalSeconds = try c.decodeIfPresent(Int.self, forKey: .localPollIntervalSeconds) ?? localPollIntervalSeconds
         networkVolumesToShow = try c.decodeIfPresent(Set<String>.self, forKey: .networkVolumesToShow) ?? networkVolumesToShow
         networkPollIntervalSeconds = try c.decodeIfPresent(Int.self, forKey: .networkPollIntervalSeconds) ?? networkPollIntervalSeconds
