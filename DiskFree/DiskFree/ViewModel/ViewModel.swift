@@ -560,7 +560,7 @@ public final class ViewModel {
                                warningThreshold: preferences.lowSpaceErrorThresholdGigs,
                                badText: "Low Disk Space Error.  $0 is running EXTREMELY low on free space.  It now has only $1 gigabytes of free space left.",
                                goodText: "$0 is no longer extremely low on free space.  It now has $1 gigabytes of free space left.",
-                               lowVolumes: isNetwork ? &errorNetworkVolumes : &errorLocalVolumes,
+                               lowVolumes: isNetwork ? \.errorNetworkVolumes : \.errorLocalVolumes,
                                with: preferences.errorVoice)
         }
         if preferences.soundVoiceOnWarnings {
@@ -568,7 +568,7 @@ public final class ViewModel {
                                warningThreshold: preferences.lowSpaceWarningThresholdGigs,
                                badText: "Low Disk Space Warning.  $0 is running low on free space.  It now has only $1 gigabytes of free space left.",
                                goodText: "$0 is no longer low on free space.  It now has $1 gigabytes of free space left.",
-                               lowVolumes: isNetwork ? &warningNetworkVolumes : &warningLocalVolumes,
+                               lowVolumes: isNetwork ? \.warningNetworkVolumes : \.warningLocalVolumes,
                                with: preferences.warningVoice)
         }
     }
@@ -578,7 +578,7 @@ public final class ViewModel {
                                     warningThreshold: UInt,
                                     badText: String,
                                     goodText: String,
-                                    lowVolumes: inout Set<String>,
+                                    lowVolumes: ReferenceWritableKeyPath<ViewModel, Set<String>>,
                                     with voice: VoiceActor.Voice)
     {
         let key = volume.volume.key
@@ -586,14 +586,14 @@ public final class ViewModel {
             text.replacingOccurrences(of: "$0", with: volume.volume.name)
                 .replacingOccurrences(of: "$1", with: "\(newSize.gigsFree)")
         }
-        if lowVolumes.contains(key) {
+        if self[keyPath: lowVolumes].contains(key) {
             if newSize.gigsFree > warningThreshold + Self.recoveryMargin(for: warningThreshold) {
-                lowVolumes.remove(key)
+                self[keyPath: lowVolumes].remove(key)
                 speak(fill(goodText), voice)
             }
         } else if newSize.gigsFree < warningThreshold {
             print("WARNING: \(volume.volume.name) newSize.gigsFree \(newSize.gigsFree)")
-            lowVolumes.insert(key)
+            self[keyPath: lowVolumes].insert(key)
             speak(fill(badText), voice)
         }
     }
