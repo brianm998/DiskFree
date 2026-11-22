@@ -74,7 +74,7 @@ public struct SizeInfo: Sendable,
             self.totalCapacity = totalCapacity
             self.timestamp = timestamp
         } else {
-            throw "couldn't read size data for volume \(path)" 
+            throw DiskFreeError.unreadableVolumeSize(path: "\(path)")
         }
     }
 
