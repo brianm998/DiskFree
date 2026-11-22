@@ -51,7 +51,7 @@ public actor Manager: Sendable {
 
     private let inFlightProbes = InFlightProbes() // network mounts with a statfs outstanding
     
-    private var localVolumeSizes: LocalVolumeRecords = [:] // keyed by volume.name
+    private var localVolumeSizes: LocalVolumeRecords = [:] // keyed by volume.key
     private var networkVolumeSizes: NetworkVolumeRecords = [:] // keyed by volume.localMount
 
     // every network volume seen this run, keyed by localMount. Automounted
@@ -79,10 +79,41 @@ public actor Manager: Sendable {
         networkSizeOverride = networkSize
     }
 
+    /// Records stored under a volume name move to the key of the one mounted
+    /// volume with that name; names that match none or several are dropped.
+    /// Entries that already look like keys (UUID or path) are kept, so an
+    /// unplugged drive keeps its history.
+    static func migrateNameKeys<T>(_ stored: [String: T],
+                                   volumes: [LocalVolume],
+                                   merge: (T, T) -> T) -> [String: T]
+    {
+        let keys = Set(volumes.map(\.key))
+        var out: [String: T] = [:]
+        func add(_ key: String, _ value: T) {
+            if let old = out[key] { out[key] = merge(old, value) } else { out[key] = value }
+        }
+        for (key, value) in stored {
+            if keys.contains(key) || LocalVolume.looksLikeKey(key) {
+                add(key, value)
+            } else {
+                let matches = volumes.filter { $0.name == key }
+                if matches.count == 1 { add(matches[0].key, value) }
+            }
+        }
+        return out
+    }
+
     public func loadStoredLocalVolumeRecords() async {
+        await loadStoredLocalVolumeRecords(volumes: volumes)
+    }
+
+    func loadStoredLocalVolumeRecords(volumes: [LocalVolume]) async {
         do {
             if let recordKeeper = LocalVolumeRecordKeeper() {
-                let initialSizes = try await recordKeeper.loadRecords()
+                let stored = try await recordKeeper.loadRecords()
+                let initialSizes = Self.migrateNameKeys(stored, volumes: volumes) { a, b in
+                    (a + b).sorted { $0.timestamp < $1.timestamp }
+                }
 
                 localVolumeSizes = initialSizes
                 print("loaded stored records \(initialSizes.count)")
@@ -158,7 +189,8 @@ public actor Manager: Sendable {
         let rootSymlinks = try await readRootSymlinks()
 
         let keys: [URLResourceKey] = [
-            .volumeNameKey,             // non-localized; keys the persisted records
+            .volumeNameKey,             // displayed and spoken
+            .volumeUUIDStringKey,       // keys the persisted records
             .volumeIsLocalKey,
             .volumeIsRootFileSystemKey, // identifies which volume is '/'
             .volumeIsInternalKey,
@@ -196,7 +228,8 @@ public actor Manager: Sendable {
                                        mountPoint: mountPoint,
                                        userVisibleMountPoint: userVisibleMountPoint,
                                        isInternal: values.volumeIsInternal ?? false,
-                                       isEjectable: values.volumeIsEjectable ?? false))
+                                       isEjectable: values.volumeIsEjectable ?? false,
+                                       uuid: values.volumeUUIDString))
             } catch {
                 print("error \(error)")
             }
@@ -272,7 +305,7 @@ public actor Manager: Sendable {
             // one failing volume must not stop the others from being sampled
             do {
                 if let sizeOfVolume = try self.sizeOf(volume: volume, at: timestamp) {
-                    localVolumeSizes[volume.name, default: []].append(sizeOfVolume)
+                    localVolumeSizes[volume.key, default: []].append(sizeOfVolume)
                 }
             } catch {
                 print("error querying size of \(volume.name) at \(volume.mountPoint): \(error)")
