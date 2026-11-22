@@ -18,6 +18,11 @@ struct LocalVolumeChoiceItemView: View {
               .onChange(of: volumeViewModel.isSelected) { _, value in
                   viewModel.update(for: volumeViewModel)
               }
+            if volumeViewModel.volume.isReadOnly {
+                Text("read-only")
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+            }
             if !volumeViewModel.isMounted {
                 Text("not connected")
                   .font(.caption)

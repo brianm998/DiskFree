@@ -18,6 +18,11 @@ enum VolumeType: Equatable,
         }
     }
     
+    var isReadOnly: Bool {
+        if case .local(let volume) = self { return volume.isReadOnly }
+        return false
+    }
+
     var name: String {
         switch self {
         case .network(let volume):
