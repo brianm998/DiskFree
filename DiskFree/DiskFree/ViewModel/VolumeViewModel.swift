@@ -11,6 +11,8 @@ class VolumeViewModel: Identifiable,
     var volume: VolumeType
     var lastSize: SizeInfo? 
     public var isSelected = true
+    /// false while the volume is unplugged; its history is kept for when it returns
+    var isMounted = true
     var lineColor: Color
     var chartFreeLineText: String {
         if self.sizes.count > 1 {

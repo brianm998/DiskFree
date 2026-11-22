@@ -73,6 +73,9 @@ public actor Manager: Sendable {
     var dfTimeoutSeconds: TimeInterval = 10
 
     // test seam: replaces the output of `mount`
+    // test seam: replaces the listing of local volumes
+    var localListingOverride: (@Sendable () async throws -> [LocalVolume])?
+    func setLocalListingOverride(_ l: (@Sendable () async throws -> [LocalVolume])?) { localListingOverride = l }
     var mountListingOverride: (@Sendable () async throws -> [NetworkVolume])?
     // test seam: replaces the statfs probe of a network mount (runs on a background thread)
     var networkProbeOverride: (@Sendable (String, TimeInterval) -> SizeInfo?)?
@@ -205,6 +208,11 @@ public actor Manager: Sendable {
     }
 
     func listLocalVolumes() async throws -> [LocalVolume] {
+        if let localListingOverride {
+            let ret = try await localListingOverride()
+            self.volumes = ret
+            return ret
+        }
 
         let rootSymlinks = try await readRootSymlinks()
 

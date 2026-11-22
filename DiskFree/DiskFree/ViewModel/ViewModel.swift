@@ -325,6 +325,7 @@ public final class ViewModel {
 
     func listLocalVolumes() {
         if listingTask != nil { return }
+        startObservingMounts()
         self.listingTask = Task.detached { [weak self] in
             do {
                 guard let found = try await self?.discoverLocalVolumes() else { return }
@@ -357,6 +358,53 @@ public final class ViewModel {
         return volumes
     }
 
+    // MARK: mount notifications
+
+    /// test seam: where mount notifications are observed
+    var mountNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter
+    /// delay that coalesces bursts of notifications (a mount posts several)
+    var mountDebounceSeconds: Double = 0.5
+    private var mountObservers: [NSObjectProtocol] = []
+    private var mountDebounceTask: Task<Void,Never>?
+
+    var isObservingMounts: Bool { !mountObservers.isEmpty }
+
+    func startObservingMounts() {
+        if isObservingMounts { return }
+        let names: [Notification.Name] = [NSWorkspace.didMountNotification,
+                                          NSWorkspace.didUnmountNotification,
+                                          NSWorkspace.didRenameVolumeNotification]
+        mountObservers = names.map { name in
+            mountNotificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.handleMountNotification() }
+            }
+        }
+    }
+
+    func stopObservingMounts() {
+        for o in mountObservers { mountNotificationCenter.removeObserver(o) }
+        mountObservers = []
+        mountDebounceTask?.cancel()
+        mountDebounceTask = nil
+    }
+
+    /// A volume was mounted, unmounted or renamed: re-list shortly, and poll
+    /// the network volumes now (Finder-mounted shares post these too).
+    func handleMountNotification() {
+        guard isObservingMounts else { return }
+        mountDebounceTask?.cancel()
+        let delay = mountDebounceSeconds
+        mountDebounceTask = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: UInt64(max(delay, 0)*1_000_000_000)) }
+            catch { return }
+            guard let self, self.isObservingMounts else { return }
+            await self.rediscoverLocalVolumes()
+            if self.networkVolumeTask != nil, !Task.isCancelled {
+                _ = await self.networkPollOnce()
+            }
+        }
+    }
+
     private var listingTask: Task<Void,Never>?
     private var localVolumeTask: Task<Void,Never>?
     private var networkVolumeTask: Task<Void,Never>?
@@ -364,6 +412,7 @@ public final class ViewModel {
     /// Cancel all polling loops (window closed).  A later listLocalVolumes() /
     /// listNetworkVolumes() starts them again.
     func stopPolling() {
+        stopObservingMounts()
         listingTask?.cancel()
         localVolumeTask?.cancel()
         networkVolumeTask?.cancel()
@@ -414,13 +463,13 @@ public final class ViewModel {
             return 0
         }
         for volumeViewModel in localVolumes {
-            if volumeViewModel.isSelected {
+            if volumeViewModel.isSelected && volumeViewModel.isMounted {
                 let maxGigs = volumeViewModel.minGigs(showFree: showFree, showUsed: showUsed)
                 if maxGigs < ret { ret = maxGigs }
             }
         }
         for volumeViewModel in networkVolumes {
-            if volumeViewModel.isSelected {
+            if volumeViewModel.isSelected && volumeViewModel.isMounted {
                 let maxGigs = volumeViewModel.minGigs(showFree: showFree, showUsed: showUsed)
                 if maxGigs < ret { ret = maxGigs }
             }
@@ -436,13 +485,13 @@ public final class ViewModel {
             return UInt.max<<8
         }
         for volumeViewModel in localVolumes {
-            if volumeViewModel.isSelected {
+            if volumeViewModel.isSelected && volumeViewModel.isMounted {
                 let maxGigs = volumeViewModel.maxGigs(showFree: showFree, showUsed: showUsed)
                 if maxGigs > ret { ret = maxGigs }
             }
         }
         for volumeViewModel in networkVolumes {
-            if volumeViewModel.isSelected {
+            if volumeViewModel.isSelected && volumeViewModel.isMounted {
                 let maxGigs = volumeViewModel.maxGigs(showFree: showFree, showUsed: showUsed)
                 if maxGigs > ret { ret = maxGigs }
             }
@@ -606,7 +655,8 @@ public final class ViewModel {
                     volume.lastSize = newSize
                     volume.sizes = newSizes
 
-                    if let oldSize,
+                    if volume.isMounted,
+                       let oldSize,
                        let newSize
                     {
                         if preferences.soundVoiceOnErrors { 
@@ -655,9 +705,9 @@ public final class ViewModel {
         return sorted.map(\.id) == volumes.map(\.id) ? nil : sorted
     }
 
-    private func applyColors() {
+    func applyColors() {
         refreshAllVolumes()   // lastSize values may have changed
-        let volumesEmptyFirst = self.allVolumes.filter { $0.isSelected }
+        let volumesEmptyFirst = self.allVolumes.filter { $0.isSelected && $0.isMounted }
         
         var colorIndex = 0
         var lastSelectedViewModel: VolumeViewModel? = nil
@@ -750,7 +800,7 @@ public final class ViewModel {
         return currentLocalPollInterval
     }
 
-    private func rediscoverLocalVolumes() async {
+    func rediscoverLocalVolumes() async {
         do {
             let volumes = try await manager.listLocalVolumes()
             reconcileLocalVolumes(with: volumes)
@@ -767,8 +817,13 @@ public final class ViewModel {
 
     /// Merge freshly discovered volumes into localVolumes, by key.  Existing view
     /// models are kept (with the new name and mount point); new volumes are appended;
-    /// volumes no longer present are left in place.
+    /// volumes no longer present are kept with their history but marked not mounted.
     func reconcileLocalVolumes(with volumes: [LocalVolume]) {
+        let present = Set(volumes.map(\.key))
+        for existing in localVolumes {
+            let mounted = present.contains(existing.volume.key)
+            if existing.isMounted != mounted { existing.isMounted = mounted }
+        }
         for volume in volumes {
             if let existing = localVolumes.first(where: { $0.volume.key == volume.key }) {
                 // equality is by key only, so always replace to pick up a new name or mount point
