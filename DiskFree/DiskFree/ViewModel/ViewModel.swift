@@ -792,6 +792,8 @@ public final class ViewModel {
             // time span of the records, computed off the main actor
             let duration = Date().timeIntervalSince1970 - oldestTime(from: records)
                     await self.localRecordViewUpdate(records: records, duration: duration)
+            // a probe hit the wrong volume (unclean eject): re-list now
+            if await manager.takeRelistRequest() { await rediscoverLocalVolumes() }
         } catch is CancellationError {
             return nil
         } catch {
