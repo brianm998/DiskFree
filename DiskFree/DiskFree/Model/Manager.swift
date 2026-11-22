@@ -547,12 +547,7 @@ struct LocalProbeSeam: Sendable {
 
     static let live = LocalProbeSeam(
         statfs: { path, ts in
-            var fs = Darwin.statfs()
-            guard Darwin.statfs(path, &fs) == 0, let size = SizeInfo(statfs: fs, timestamp: ts) else { return nil }
-            let on = withUnsafePointer(to: &fs.f_mntonname) {
-                $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
-            }
-            return LocalStatfs(mountOn: on, size: size)
+            liveStatfs(path, timestamp: ts)
         },
         capacity: { path in
             let keys: Set<URLResourceKey> = [.volumeAvailableCapacityForImportantUsageKey,
@@ -598,4 +593,13 @@ final class CapacityCache: @unchecked Sendable {
         return SizeInfo(importantCapacity: important, opportunisticCapacity: opportunistic,
                         totalCapacity: base.totalCapacity, timestamp: base.timestamp)
     }
+}
+
+private func liveStatfs(_ path: String, timestamp: TimeInterval) -> LocalStatfs? {
+    var fs = statfs()
+    guard statfs(path, &fs) == 0, let size = SizeInfo(statfs: fs, timestamp: timestamp) else { return nil }
+    let on = withUnsafePointer(to: &fs.f_mntonname) {
+        $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+    }
+    return LocalStatfs(mountOn: on, size: size)
 }
