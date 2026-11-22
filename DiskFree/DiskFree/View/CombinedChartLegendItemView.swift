@@ -3,7 +3,7 @@ import Charts
 
 // each row in the combind chart legend
 struct CombinedChartLegendItemView: View {
-    @State var volumeView: VolumeViewModel
+    let volumeView: VolumeViewModel
     let legendFontSize: Double
 
     var volumeIcon: some View {
@@ -114,25 +114,18 @@ struct CombinedChartLegendItemView: View {
             Text(volumeView.chartFreeLineText)
               .font(.system(size: legendFontSize))
               .foregroundStyle(volumeView.weightAdjustedColor)
-              .blinking(if: volumeView.showLowSpaceWarning,
-                          duration: 0.4)
-
-
+              .lowSpacePulse(if: volumeView.showLowSpaceWarning)
 
             // battery like visual of amount left
             self.percentFullVisual
               .frame(width: legendFontSize/3,
                      height: legendFontSize)
-              .blinking(if: volumeView.showLowSpaceWarning,
-                          duration: 0.4)
 
             if let amountEmpty = volumeView.amountEmpty {
                 // text for free space available
                 Text(String(format: "%d%%", Int(amountEmpty*100)))
                   .font(.system(size: legendFontSize*0.8))
                        .foregroundStyle(volumeView.weightAdjustedColor)
-                       .blinking(if: volumeView.showLowSpaceWarning,
-                                   duration: 0.4)
             }
             
             

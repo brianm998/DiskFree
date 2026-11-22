@@ -1,5 +1,6 @@
 import XCTest
 import AppKit
+import SwiftUI
 @testable import DiskFree
 
 @MainActor
@@ -24,6 +25,13 @@ final class ScreenshotRendererTests: XCTestCase {
             let rep = try XCTUnwrap(NSBitmapImageRep(data: data))
             XCTAssertEqual(rep.pixelsWide, 2880, name)
             XCTAssertEqual(rep.pixelsHigh, 1800, name)
+        }
+    }
+
+    func testRendersInDarkAppearance() throws {
+        for (name, view) in ScreenshotRenderer.screenshotViews() {
+            let dark = AnyView(view.environment(\.colorScheme, .dark))
+            XCTAssertNotNil(ScreenshotRenderer.pngData(for: dark), name)
         }
     }
 }

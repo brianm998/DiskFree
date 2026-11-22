@@ -9,7 +9,7 @@ struct SettingsView: View {
         return VStack(alignment: .leading) {
             Text("General")
               .font(.system(size: 18))
-              .foregroundColor(.gray)
+              .foregroundColor(.secondary)
 
             Picker("Chart Type", selection: $viewModel.preferences.chartType) {
                 ForEach(ChartType.allCases) { type in
@@ -68,11 +68,11 @@ struct SettingsView: View {
         return VStack(alignment: .leading) {
             Text("Network")
               .font(.system(size: 18))
-              .foregroundColor(.gray)
+              .foregroundColor(.secondary)
             
             Text("DiskFree can show any of these")
               .font(.system(size: 10))
-              .foregroundColor(.gray)
+              .foregroundColor(.secondary)
 
 
             ScrollView {
@@ -91,11 +91,11 @@ struct SettingsView: View {
         return VStack(alignment: .leading) {
             Text("Local")
               .font(.system(size: 18))
-              .foregroundColor(.gray)
+              .foregroundColor(.secondary)
             
             Text("DiskFree can show any of these")
               .font(.system(size: 10))
-              .foregroundColor(.gray)
+              .foregroundColor(.secondary)
 
             ScrollView {
                 VStack(alignment: .leading) {
@@ -121,11 +121,11 @@ struct SettingsView: View {
         return VStack(alignment: .leading) {
             Text("Audio")
               .font(.system(size: 18))
-              .foregroundColor(.gray)
+              .foregroundColor(.secondary)
 
             Text("DiskFree can speak when space runs too low.")
               .font(.system(size: 10))
-              .foregroundColor(.gray)
+              .foregroundColor(.secondary)
 
             VStack(alignment: .leading) {
                 Toggle(isOn: $viewModel.preferences.soundVoiceOnWarnings) {
@@ -154,7 +154,7 @@ struct SettingsView: View {
               }
             }
               .padding()
-              .background(.yellow.opacity(0.8))
+              .background(.yellow.opacity(0.25))
 
             VStack(alignment: .leading) {
                 Toggle(isOn: $viewModel.preferences.soundVoiceOnErrors) {
@@ -182,7 +182,7 @@ struct SettingsView: View {
               }
             }
               .padding()
-              .background(.red.opacity(0.8))
+              .background(.red.opacity(0.25))
         }
     }
 
@@ -196,7 +196,7 @@ struct SettingsView: View {
             VStack(alignment: .center) {
                 Text("Settings")
                   .font(.system(size: 28))
-                  .foregroundColor(.gray)
+                  .foregroundColor(.secondary)
                 Spacer()
                 HStack(alignment: .top) {
                     generalSettings

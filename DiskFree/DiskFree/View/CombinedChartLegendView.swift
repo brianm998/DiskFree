@@ -11,7 +11,7 @@ struct CombinedChartLegendView: View {
                     ScrollView {
                         Text("Free Space")
                           .font(.system(size: viewModel.preferences.legendFontSize))
-                          .foregroundColor(.black)
+                          .foregroundColor(.primary)
 
                         Grid(alignment: .leading, horizontalSpacing: 4, verticalSpacing: 0) {
                             ForEach(self.viewModel.allVolumes) { volumeView in
