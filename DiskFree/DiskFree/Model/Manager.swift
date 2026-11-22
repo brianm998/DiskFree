@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /*
 
@@ -140,10 +141,10 @@ public actor Manager: Sendable {
                 }
 
                 localVolumeSizes = initialSizes
-                print("loaded stored records \(initialSizes.count)")
+                Log.persistence.info("loaded stored records \(initialSizes.count, privacy: .public)")
             } 
         } catch {
-            print("error loading stored records: \(error)")
+            Log.persistence.error("error loading stored records: \(error, privacy: .public)")
         }
     }
     
@@ -156,17 +157,17 @@ public actor Manager: Sendable {
                         knownNetworkVolumes[k.volume.localMount] = k
                     }
                 } catch {
-                    print("error loading known network volumes: \(error)")
+                    Log.persistence.error("error loading known network volumes: \(error, privacy: .public)")
                 }
                 let initialSizes = try await recordKeeper.loadRecords()
 
                 networkVolumeSizes = initialSizes
-                print("loaded stored records \(initialSizes.count)")
+                Log.persistence.info("loaded stored records \(initialSizes.count, privacy: .public)")
 
                 return initialSizes
             } 
         } catch {
-            print("error loading stored records: \(error)")
+            Log.persistence.error("error loading stored records: \(error, privacy: .public)")
         }
         return nil
     }
@@ -268,7 +269,7 @@ public actor Manager: Sendable {
                                        isEjectable: values.volumeIsEjectable ?? false,
                                        uuid: values.volumeUUIDString))
             } catch {
-                print("error \(error)")
+                Log.volumes.error("error: \(error, privacy: .public)")
             }
         }
         self.volumes = ret
@@ -304,7 +305,7 @@ public actor Manager: Sendable {
                             return (volume, size)
                         }
                     } catch {
-                        print("Error querying \(volume.localMount): \(error)")
+                        Log.network.error("error querying \(volume.localMount, privacy: .public): \(error, privacy: .public)")
                     }
                     return nil
                 }
@@ -314,7 +315,7 @@ public actor Manager: Sendable {
                 if let (volume, size) = result {
                     if let size {
                         knownNetworkVolumes[volume.localMount]?.lastSample = timestamp
-                        print("got size \(size) for \(volume)")
+                        Log.network.debug("got size \(String(describing: size), privacy: .public) for \(volume.localMount, privacy: .public)")
                         if var existingList = networkVolumeSizes[volume.localMount] {
                             existingList.append(size)
                             networkVolumeSizes[volume.localMount] = existingList
@@ -328,7 +329,7 @@ public actor Manager: Sendable {
 
         if let keeper = NetworkVolumeRecordKeeper(directory: recordDirectory) {
             do { try await keeper.save(known: Array(knownNetworkVolumes.values)) }
-            catch { print("error saving known network volumes: \(error)") }
+            catch { Log.persistence.error("error saving known network volumes: \(error, privacy: .public)") }
         }
 
         // only keep newer entries 
@@ -361,7 +362,7 @@ public actor Manager: Sendable {
                     do {
                         return (volume, try await self.sizeOf(volume: volume, at: timestamp))
                     } catch {
-                        print("error querying size of \(volume.name) at \(volume.mountPoint): \(error)")
+                        Log.volumes.error("error querying size of \(volume.name, privacy: .public) at \(volume.mountPoint, privacy: .public): \(error, privacy: .public)")
                         return (volume, nil)
                     }
                 }
@@ -397,7 +398,7 @@ public actor Manager: Sendable {
         // blocked in the kernel, don't pile more on top of it
         let key = volume.key
         guard localInFlight.begin(key) else {
-            throw "previous probe of \(volume.mountPoint) still blocked"
+            throw DiskFreeError.probeStillInFlight(path: volume.mountPoint)
         }
         let inFlight = localInFlight
         let seam = localProbe
@@ -411,14 +412,14 @@ public actor Manager: Sendable {
                 once.resume(.success(outcome))
             }
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
-                once.resume(.failure("timed out reading \(volume.mountPoint)"))
+                once.resume(.failure(DiskFreeError.probeTimedOut(path: volume.mountPoint)))
             }
         }
         switch outcome {
         case .sample(let size): return size
         case .failed: return nil
         case .wrongVolume:
-            print("\(volume.mountPoint) is not the expected volume; requesting a re-list")
+            Log.volumes.info("\(volume.mountPoint, privacy: .public) is not the expected volume; requesting a re-list")
             relistRequested = true
             return nil
         }
@@ -472,7 +473,7 @@ public actor Manager: Sendable {
         // blocked in the kernel, don't pile more on top of it
         let path = volume.localMount
         guard inFlightProbes.begin(path) else {
-            throw "previous probe of \(path) still blocked"
+            throw DiskFreeError.probeStillInFlight(path: path)
         }
         let inFlight = inFlightProbes
         let probe = networkProbeOverride
@@ -493,7 +494,7 @@ public actor Manager: Sendable {
                 once.resume(.success(size))
             }
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
-                once.resume(.failure("timed out reading \(path)"))
+                once.resume(.failure(DiskFreeError.probeTimedOut(path: path)))
             }
         }
     }
@@ -526,7 +527,6 @@ final class ResumeOnce<T: Sendable>: @unchecked Sendable {
 }
 
 
-extension String: @retroactive Error { }
 
 
 /// What a local probe found.

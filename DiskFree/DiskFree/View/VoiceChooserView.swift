@@ -1,3 +1,4 @@
+import os
 import SwiftUI
 
 
@@ -52,7 +53,7 @@ struct VoiceChooserView: View {
             do {
                 try await voiceActor.say(testMessage, as: voice)
             } catch {
-                print("can't say \(testMessage) as \(voice.rawValue): \(error)")
+                Log.speech.error("can't say \(testMessage, privacy: .public) as \(voice.rawValue, privacy: .public): \(error, privacy: .public)")
             }
         }
     }

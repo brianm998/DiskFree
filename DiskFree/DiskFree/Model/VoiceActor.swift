@@ -1,4 +1,5 @@
 import Foundation
+import os
 import AppKit
 
 // talk to this global actor directly if you want to know when the speaking ends
@@ -10,7 +11,7 @@ public func say(_ message: String, as voice: VoiceActor.Voice = .Flo) {
         do {
             try await voiceActor.say(message, as: voice)
         } catch {
-            print("unable to say: \(message): because of error \(error)")
+            Log.speech.error("unable to say: \(message, privacy: .public): \(error, privacy: .public)")
         }
     }
 }

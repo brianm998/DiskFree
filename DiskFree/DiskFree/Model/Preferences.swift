@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 
 public struct Preferences: Codable, Sendable {
@@ -126,7 +127,7 @@ public actor PreferenceManager {
             do {
                 self.preferences = try JSONDecoder().decode(Preferences.self, from: data)
             } catch {
-                print("cannot load preferences: \(error)")
+                Log.persistence.error("cannot load preferences: \(error, privacy: .public)")
             }
         }
     }

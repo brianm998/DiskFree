@@ -1,3 +1,4 @@
+import os
 import SwiftUI
 import Combine
 
@@ -171,11 +172,11 @@ public final class ViewModel {
             while let self, let (l, n) = self.takePending() {
                 if let l {
                     do { try await self.localVolumeRecordKeeper?.save(records: l) }
-                    catch { print("cannot save local volume records: \(error)") }
+                    catch { Log.persistence.error("cannot save local volume records: \(error, privacy: .public)") }
                 }
                 if let n {
                     do { try await self.networkVolumeRecordKeeper?.save(records: n) }
-                    catch { print("cannot save network volume records: \(error)") }
+                    catch { Log.persistence.error("cannot save network volume records: \(error, privacy: .public)") }
                 }
             }
             self?.saveTask = nil
@@ -320,7 +321,7 @@ public final class ViewModel {
         } catch is CancellationError {
             return nil
         } catch {
-            print("ERROR: \(error)")
+            Log.volumes.error("\(error, privacy: .public)")
         }
         return networkPollIntervalOverride ?? Self.effectiveNetworkInterval(preferences.networkPollIntervalSeconds)
     }
@@ -335,7 +336,7 @@ public final class ViewModel {
                 if Task.isCancelled { return }
                 await self?.startLocalVolumeTask()
             } catch {
-                print("ERROR: \(error)")
+                Log.volumes.error("\(error, privacy: .public)")
             }
         }
     }
@@ -603,7 +604,7 @@ public final class ViewModel {
                 speak(fill(goodText), voice)
             }
         } else if newSize.gigsFree < warningThreshold {
-            print("WARNING: \(volume.volume.name) newSize.gigsFree \(newSize.gigsFree)")
+            Log.volumes.info("low space: \(volume.volume.name, privacy: .public) gigsFree \(newSize.gigsFree, privacy: .public)")
             self[keyPath: lowVolumes].insert(key)
             speak(fill(badText), voice)
         }
@@ -669,7 +670,6 @@ public final class ViewModel {
             for volume in self.localVolumes {
 
                 if let newSizes = self.newLocalVolumeSizes[volume.volume.key] {
-                    //print("volume.lastSize \(volume.lastSize)")
 
                     let oldSize = volume.lastSize
                     let newSize = newSizes.last
@@ -679,7 +679,6 @@ public final class ViewModel {
 
                     checkSpaceAlerts(for: volume, oldSize: oldSize, newSize: newSize)
 
-                    //print("updating volume \(volume.volume.name) size to \(newSizes.count)")
                 }
             }
             // only assign when the order changed, so Observation doesn't
@@ -793,7 +792,7 @@ public final class ViewModel {
         } catch is CancellationError {
             return nil
         } catch {
-            print("ERROR: \(error)")
+            Log.volumes.error("\(error, privacy: .public)")
         }
         return currentLocalPollInterval
     }
@@ -803,7 +802,7 @@ public final class ViewModel {
             let volumes = try await manager.listLocalVolumes()
             reconcileLocalVolumes(with: volumes)
         } catch {
-            print("ERROR re-listing local volumes: \(error)")
+            Log.volumes.error("error re-listing local volumes: \(error, privacy: .public)")
         }
     }
 
@@ -870,7 +869,7 @@ public final class ViewModel {
               await self.preferenceManager?.set(preferences: prefsToSave)
                 try await self.preferenceManager?.writePreferences()
             } catch {
-                print("error saving preferences: \(error)")
+                Log.persistence.error("error saving preferences: \(error, privacy: .public)")
             }
         }
     }
