@@ -13,15 +13,9 @@ struct MainView: View {
           }
 
           .toolbar {
-              if viewModel.volumeRecordsTimeDurationSeconds != 0 {
+              if !viewModel.toolbarDurationText.isEmpty {
                   ToolbarItem(placement: .principal) {
-                      if viewModel.volumeRecordsTimeDurationSeconds < 60 {
-                          let durationString = String(format: "%d", Int(viewModel.volumeRecordsTimeDurationSeconds))
-                          Text("The last \(durationString) seconds of free space")
-                      } else {
-                          let durationString = String(format: "%d", Int(viewModel.volumeRecordsTimeDurationSeconds/60))
-                          Text("The last \(durationString) minutes of free space")
-                      }
+                      Text(viewModel.toolbarDurationText)
                   }
               }
               ToolbarItem(placement: .primaryAction) {

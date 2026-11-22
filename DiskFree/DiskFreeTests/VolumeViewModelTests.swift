@@ -112,9 +112,10 @@ struct VolumeViewModelTests {
     }
 
     @Test func maxGigsForEachCombination() {
-        let m = model([sample(free: 300, used: 600, t: 1),
-                       sample(free: 100, used: 800, t: 2),
-                       sample(free: 200, used: 700, t: 3)])
+        let m = model([sample(free: 300, used: 600, t: 100),
+                       sample(free: 100, used: 800, t: 200),
+                       sample(free: 200, used: 700, t: 300),
+                       sample(free: 200, used: 700, t: 400)])
         #expect(m.maxFreeGigs == 300)
         #expect(m.maxUsedGigs == 800)
         #expect(m.maxGigs(showFree: true, showUsed: false) == 300)
@@ -124,9 +125,10 @@ struct VolumeViewModelTests {
     }
 
     @Test func minGigsForEachCombination() {
-        let m = model([sample(free: 300, used: 600, t: 1),
-                       sample(free: 100, used: 800, t: 2),
-                       sample(free: 200, used: 700, t: 3)])
+        let m = model([sample(free: 300, used: 600, t: 100),
+                       sample(free: 100, used: 800, t: 200),
+                       sample(free: 200, used: 700, t: 300),
+                       sample(free: 200, used: 700, t: 400)])
         #expect(m.minFreeGigs == 100)
         #expect(m.minUsedGigs == 600)
         // results over 50 get 20 subtracted for chart padding
@@ -137,7 +139,8 @@ struct VolumeViewModelTests {
     }
 
     @Test func minGigsSmallValuesNotPadded() {
-        let m = model([sample(free: 30, used: 40), sample(free: 50, used: 45)])
+        let m = model([sample(free: 30, used: 40, t: 100), sample(free: 50, used: 45, t: 200),
+                       sample(free: 50, used: 45, t: 300)])
         #expect(m.minGigs(showFree: true, showUsed: false) == 30)
         #expect(m.minGigs(showFree: true, showUsed: true) == 30)
         #expect(m.minGigs(showFree: false, showUsed: true) == 40)
@@ -153,24 +156,74 @@ struct VolumeViewModelTests {
 
     // MARK: chart caches
 
-    @Test func chartSizesCapsAndKeepsEnds() {
-        let samples = (0..<900).map { sample(free: 100 + $0 % 50, used: 500, t: TimeInterval($0)) }
+    /// bucket width for the default 60 minute window and the cap
+    static let width = 3600.0 / Double(VolumeViewModel.chartPointCap)
+
+    @Test func chartSizesCapsAndKeepsFirst() {
+        let samples = (0..<900).map { sample(free: 100 + $0 % 50, used: 500, t: TimeInterval($0 * 4)) }
         let m = model(samples)
-        #expect(m.chartSizes.count <= 300)
-        #expect(m.chartSizes.first == samples.first)
-        #expect(m.chartSizes.last == samples.last)
+        #expect(m.chartSizes.count <= VolumeViewModel.chartPointCap)
+        #expect(m.chartSizes.first?.size == samples.first)
         #expect(m.sizes.count == 900)
     }
 
-    @Test func chartSizesEqualsSizesWhenSmall() {
-        let samples = (0..<100).map { sample(free: 100, used: 500, t: TimeInterval($0)) }
-        #expect(model(samples).chartSizes == samples)
+    @Test func sampleInsideOpenBucketLeavesChartSizesAlone() {
+        let w = Self.width
+        var samples = (0..<20).map { sample(free: 100, used: 500, t: TimeInterval($0 * 4)) }
+        let m = model(samples)
+        let before = m.chartSizes
+        // same bucket as the last sample: floor(t / w) unchanged
+        let last = samples.last!.timestamp
+        let t = last + 1
+        #expect(floor(t / w) == floor(last / w))
+        samples.append(sample(free: 90, used: 510, t: t))
+        m.sizes = samples
+        #expect(m.chartSizes == before)
+    }
+
+    @Test func sampleCompletingABucketAddsOnePoint() {
+        let w = Self.width
+        var samples = (0..<20).map { sample(free: 100, used: 500, t: TimeInterval($0 * 4)) }
+        let m = model(samples)
+        let before = m.chartSizes.count
+        // first sample of the next bucket completes the previous one
+        let t = (floor(samples.last!.timestamp / w) + 1) * w
+        samples.append(sample(free: 90, used: 510, t: t))
+        m.sizes = samples
+        #expect(m.chartSizes.count == before + 1)
+    }
+
+    @Test func gapLongerThanThreePollsSplitsSegments() {
+        let near = (0..<10).map { sample(free: 100, used: 500, t: TimeInterval($0 * 4)) }
+        // 100 s gap, then more samples spanning several buckets
+        let far = (0..<40).map { sample(free: 100, used: 500, t: 200 + TimeInterval($0 * 4)) }
+        let m = model(near + far)
+        #expect(Set(m.chartSizes.map(\.segment)) == [0, 1])
+        // within 3 intervals: still one segment
+        let ok = model((0..<40).map { sample(free: 1, used: 1, t: TimeInterval($0 * 12)) })
+        #expect(Set(ok.chartSizes.map(\.segment)) == [0])
+    }
+
+    @Test @MainActor func toolbarDurationStableWithinAMinute() {
+        let vm = ViewModel(demo: true)
+        vm.volumeRecordsTimeDurationSeconds = 120
+        let text = vm.toolbarDurationText
+        #expect(text == "The last 2 minutes of free space")
+        for secs in [124.0, 128, 150, 179] {
+            vm.volumeRecordsTimeDurationSeconds = secs
+            #expect(vm.toolbarDurationText == text)
+        }
+        vm.volumeRecordsTimeDurationSeconds = 181
+        #expect(vm.toolbarDurationText == "The last 3 minutes of free space")
+        vm.volumeRecordsTimeDurationSeconds = 30
+        #expect(vm.toolbarDurationText == "The last 30 seconds of free space")
     }
 
     @Test func cachedMinMaxMatchFullScan() {
-        let samples = [sample(free: 300, used: 700, t: 1),
-                       sample(free: 100, used: 900, t: 2),
-                       sample(free: 500, used: 500, t: 3)]
+        let samples = [sample(free: 300, used: 700, t: 100),
+                       sample(free: 100, used: 900, t: 200),
+                       sample(free: 500, used: 500, t: 300),
+                       sample(free: 500, used: 500, t: 400)]
         let m = model(samples)
         #expect(m.minFreeGigs == 100)
         #expect(m.maxFreeGigs == 500)
