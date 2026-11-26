@@ -32,7 +32,8 @@ max_rounds = 3
 on_red = "develop"
 
 [suite.swift]
-command = "cd DiskFree && xcodebuild test -project DiskFree.xcodeproj -scheme DiskFree -destination 'platform=macOS' -skip-testing:DiskFreeUITests 2>&1"
+# Ad hoc signing: test nodes have no development certificate (decision 1132).
+command = "cd DiskFree && xcodebuild test -project DiskFree.xcodeproj -scheme DiskFree -destination 'platform=macOS' -skip-testing:DiskFreeUITests CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= 2>&1"
 parser = "xctest"
 min_tests = 1
 level = "unit"
