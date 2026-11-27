@@ -70,8 +70,22 @@ struct DiskFreeApp: App {
     }
 }
 
+/// SwiftUI startup can reset the activation policy after `main()` sets it, so
+/// reassert `.prohibited` at each launch callback.
+final class TestHostDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+    }
+}
+
 /// Minimal app used when the process only hosts unit tests: no window opens.
 struct TestHostApp: App {
+    @NSApplicationDelegateAdaptor(TestHostDelegate.self) private var delegate
+
     var body: some Scene {
         Settings { EmptyView() }
     }
