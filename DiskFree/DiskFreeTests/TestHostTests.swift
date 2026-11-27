@@ -14,6 +14,11 @@ final class TestHostTests: XCTestCase {
 
     @MainActor
     func testActivationPolicyIsProhibited() {
+        // Launch may still be settling; let the run loop spin until it has.
+        let deadline = Date().addingTimeInterval(5)
+        while NSApplication.shared.activationPolicy() != .prohibited, Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
         XCTAssertEqual(NSApplication.shared.activationPolicy(), .prohibited)
     }
 
